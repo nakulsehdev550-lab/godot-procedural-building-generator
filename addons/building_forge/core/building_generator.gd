@@ -107,7 +107,36 @@ func generate() -> void:
                 var cell := Rect2(fp.center_xz() - plan_d.cell.size * 0.5, plan_d.cell.size)
                 plan_d["placed_cell"] = cell
         else:
-                plan_d["placed_cell"] = BFStairBuilderS.place_cell(plan_d.cell, interior_bounds, rng)
+                var cell := BFStairBuilderS.place_cell(plan_d.cell, interior_bounds, rng)
+                if not BFPartitionerS.rect_in_polygon(cell, inner, 0.2):
+                        # bbox corner landed in a notch: try candidates inside the polygon
+                        var found := false
+                        var c := inner_fp.center_xz()
+                        var candidates: Array = [
+                                Rect2(c - plan_d.cell.size * 0.5, plan_d.cell.size),
+                                Rect2(Vector2(interior_bounds.position.x + 0.4, interior_bounds.position.y + 0.4), plan_d.cell.size),
+                                Rect2(Vector2(interior_bounds.end.x - plan_d.cell.size.x - 0.4, interior_bounds.position.y + 0.4), plan_d.cell.size),
+                                Rect2(Vector2(interior_bounds.position.x + 0.4, interior_bounds.end.y - plan_d.cell.size.y - 0.4), plan_d.cell.size),
+                                Rect2(Vector2(interior_bounds.end.x - plan_d.cell.size.x - 0.4, interior_bounds.end.y - plan_d.cell.size.y - 0.4), plan_d.cell.size),
+                        ]
+                        for cand in candidates:
+                                if BFPartitionerS.rect_in_polygon(cand, inner, 0.2):
+                                        cell = cand
+                                        found = true
+                                        break
+                        if not found:
+                                # shrink toward center until it fits
+                                for shrink in [0.8, 0.6, 0.45, 0.3]:
+                                        var sz: Vector2 = plan_d.cell.size * shrink
+                                        var cand2 := Rect2(c - sz * 0.5, sz)
+                                        if BFPartitionerS.rect_in_polygon(cand2, inner, 0.12):
+                                                cell = cand2
+                                                plan_d["hole"] = Rect2(plan_d.hole.position * shrink, plan_d.hole.size * shrink)
+                                                found = true
+                                                break
+                        if not found:
+                                print("[BuildingForge] no valid stairwell spot; skipping stairs")
+                plan_d["placed_cell"] = cell
         var stair_cell: Rect2 = plan_d.placed_cell
         var stair_hole: Rect2 = Rect2(
                 stair_cell.position + (plan_d.hole.position),
@@ -244,7 +273,7 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
         var bounds := _rect_of(inner_fp).grow(-0.1)
         if bounds.get_area() < 6.0:
                 return 0
-        var res := BFPartitionerS.partition(bounds, stair_cell, p.max_room_area, rng)
+        var res := BFPartitionerS.partition(bounds, inner_fp.points, stair_cell, p.max_room_area, rng)
         var rooms: Array = res.rooms
         var walls: Array = res.walls
         # mark stair room
@@ -328,8 +357,6 @@ func _prop_sts(surfaces: Dictionary, style: String) -> Dictionary:
         var ids := ["wood_dark", "wood_light", "fabric_bed", "fabric_sofa", "appliance", "metal", "metal_dark", "porcelain", "glass", "glass_dark", "carpet", "stone", "brick_red", "tile_floor"]
         var out := {}
         for id in ids:
-                if id == "glass" or id == "glass_dark":
-                        continue
                 out[id] = surfaces_for(surfaces, id, style)
         return out
 

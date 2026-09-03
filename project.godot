@@ -3,6 +3,7 @@ config_version=5
 
 [application]
 
+run/main_scene="res://demo/demo_house.tscn"
 config/name="BuildingForge - Procedural Building Generator"
 config/description="Demo project for BuildingForge: fully procedural 3D building generator plugin for Godot 4.x"
 config/features=PackedStringArray("4.7")
