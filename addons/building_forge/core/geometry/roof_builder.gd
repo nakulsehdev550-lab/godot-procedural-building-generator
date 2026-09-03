@@ -78,14 +78,26 @@ static func build_roof(kind: int, st: SurfaceTool, st_trim: SurfaceTool, fp: BFF
                         _build_dome(st, fp, base_y - 0.28, tile)  # seat dome on wall tops
 
 
-## Eave soffit: horizontal ring under the roof overhang, wall face -> eave
-## edge, facing DOWN. Without it the wedge under pitched/cone roofs is
-## see-through from outside (single-sided slopes).
-static func _soffit(st: SurfaceTool, fp: BFFootprint, y: float, overhang: float, tile: Vector2) -> void:
+## Eave soffit: horizontal band from the wall face out to the ACTUAL roof
+## extent (each mitered wall vertex is ray-cast to the roof boundary),
+## facing DOWN. Without it the wedge under pitched/cone roofs is see-through
+## from outside, especially on non-rectangular footprints where the roof
+## overhangs the polygon outset.
+## cast: Callable(from: Vector2, dir: Vector2) -> Vector2 (outer point).
+static func _soffit(st: SurfaceTool, fp: BFFootprint, y: float, overhang: float, tile: Vector2, cast: Callable) -> void:
         if overhang < 0.02:
                 return
-        var outer := BFWallBuilderS.outer_polygon(fp.points, overhang)
         var n := fp.points.size()
+        var outer := PackedVector2Array()
+        outer.resize(n)
+        for i in n:
+                var prev := (fp.points[(i - 1 + n) % n] - fp.points[i]).normalized()
+                var next := (fp.points[(i + 1) % n] - fp.points[i]).normalized()
+                var n0 := Vector2(prev.y, -prev.x)
+                var n1 := Vector2(next.y, -next.x)
+                var m := n0 + n1
+                m = m.normalized() if m.length() > 0.01 else n1
+                outer[i] = cast.call(fp.points[i], m)
         for i in n:
                 var a: Vector2 = fp.points[i]
                 var b: Vector2 = fp.points[(i + 1) % n]
@@ -95,6 +107,44 @@ static func _soffit(st: SurfaceTool, fp: BFFootprint, y: float, overhang: float,
                         [to3(a2, y), to3(b2, y), to3(b, y), to3(a, y)], Vector3.DOWN,
                         [Vector2(a2.x * tile.x, a2.y * tile.y), Vector2(b2.x * tile.x, b2.y * tile.y),
                         Vector2(b.x * tile.x, b.y * tile.y), Vector2(a.x * tile.x, a.y * tile.y)])
+
+
+## Ray-cast helper factory: to an oriented box (gable/hip roof extent).
+static func _obb_cast(xfrm: Transform3D, hx: float, hz: float, max_t: float) -> Callable:
+        var inv := xfrm.affine_inverse()
+        return func(from: Vector2, dir: Vector2) -> Vector2:
+                var l0 := inv * Vector3(from.x, 0, from.y)
+                var ld := inv.basis * Vector3(dir.x, 0, dir.y)
+                var t := max_t
+                if absf(ld.x) > 0.0001:
+                        var tx := ((hx if ld.x > 0 else -hx) - l0.x) / ld.x
+                        if tx > 0.001:
+                                t = minf(t, tx)
+                if absf(ld.z) > 0.0001:
+                        var tz := ((hz if ld.z > 0 else -hz) - l0.z) / ld.z
+                        if tz > 0.001:
+                                t = minf(t, tz)
+                var hit := l0 + ld * t
+                var w := xfrm * Vector3(hit.x, 0, hit.z)
+                return Vector2(w.x, w.z)
+
+
+## Ray-cast helper factory: to a circle (cone roof extent).
+static func _circle_cast(c: Vector2, r: float, max_t: float) -> Callable:
+        return func(from: Vector2, dir: Vector2) -> Vector2:
+                var d := from - c
+                var b := d.dot(dir)
+                var disc := b * b - (d.length_squared() - r * r)
+                var t := max_t
+                if disc >= 0.0:
+                        var sq := sqrt(disc)
+                        var t1 := -b - sq
+                        var t2 := -b + sq
+                        if t1 > 0.001:
+                                t = minf(t, t1)
+                        elif t2 > 0.001:
+                                t = minf(t, t2)
+                return from + dir * t
 
 
 ## Flat horizontal surface at height y (top face of a deck), Godot-CW order.
@@ -233,7 +283,7 @@ static func _build_gable(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint,
                         [Vector2(0, 0), Vector2(hz * tile.x, ridge_h * tile.y), Vector2(2 * hz * tile.x, 0)])
         # seal interior
         _deck(st, fp, base_y - 0.02, tile)
-        _soffit(st_trim, fp, base_y - 0.02, overhang, tile)
+        _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
 
 static func _build_hip(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, base_y: float,
@@ -265,7 +315,7 @@ static func _build_hip(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, b
                         xfrm.basis * Vector3(sx, 0, 0).normalized(),
                         [Vector2(0, 0), Vector2(hz * tile.x, ridge_h * tile.y), Vector2(2 * hz * tile.x, 0)])
         _deck(st, fp, base_y - 0.02, tile)
-        _soffit(st_trim, fp, base_y - 0.02, overhang, tile)
+        _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
 
 static func _build_cone(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, base_y: float,
@@ -294,7 +344,9 @@ static func _build_cone(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, 
                 st.set_uv(Vector2(mid_a * r * tile.x, h * tile.y))
                 st.add_vertex(apex)
         _deck(st, fp, base_y - 0.02, tile)
-        _soffit(st_trim, fp, base_y, overhang, tile)
+        var cc := fp.center_xz()
+        var rr := maxf(fp.size_xz().x, fp.size_xz().y) * 0.5 + overhang
+        _soffit(st_trim, fp, base_y, overhang, tile, _circle_cast(cc, rr, overhang * 3.0 + 1.0))
 
 
 static func _build_dome(st: SurfaceTool, fp: BFFootprint, base_y: float, tile: Vector2) -> void:

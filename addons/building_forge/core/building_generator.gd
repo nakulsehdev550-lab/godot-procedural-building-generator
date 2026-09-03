@@ -159,7 +159,9 @@ func generate() -> void:
                 var slab_holes: Array = []
                 if plan_d.size() > 0 and i < n_floors - 1:
                         slab_holes.append(stair_hole)
-                BFSlabBuilderS.build_slab(slab_st, fp.points, base + fh - 0.301, base + fh, Rect2(), Vector2(0.5, 0.5), false, slab_holes)
+                # tiny outset makes the slab band a visible floor ledge and
+                # keeps it strictly non-coplanar with the wall band (z-fight)
+                BFSlabBuilderS.build_slab(slab_st, fp.outset(0.02), base + fh - 0.301, base + fh, Rect2(), Vector2(0.5, 0.5), false, slab_holes)
                 # thin sub-finish under interior walls; room finishes sit above
                 # it (different Y) so nothing is coplanar (z-fighting fix)
                 if i == 0 and params.generate_interior:
@@ -310,14 +312,18 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                         var lintel_h := wall_h - dh
                         if lintel_h > 0.05:
                                 BFMeshUtilS.add_box(st_int, Transform3D(basis, Vector3(mc.x, base + finish_top + dh + lintel_h * 0.5, mc.y)), Vector3(da.distance_to(db), lintel_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
-                        # door frame + panel (closed, centered)
+                        # door frame + panel. bdoor: local X = across wall,
+                        # local Y = up, local Z = along the wall - frame top at
+                        # the TOP, jambs at the SIDES (the old code offset the
+                        # jambs across the wall: floating "columns" in every
+                        # doorway) and put the top bar at mid height.
                         var dw := da.distance_to(db)
                         var bdoor := Basis(Vector3(-d.y, 0, d.x), Vector3.UP, Vector3(d.x, 0, d.y))
-                        var dxf := Transform3D(bdoor, Vector3(mc.x, base + dh * 0.5, mc.y))
-                        BFMeshUtilS.add_box(st_trim, dxf, Vector3(dw + 0.08, 0.06, 0.16), Vector2(0.5, 0.5))
-                        BFMeshUtilS.add_box(st_trim, dxf * Transform3D(Basis.IDENTITY, Vector3(-(dw * 0.5 + 0.04), 0, 0)), Vector3(0.06, dh, 0.16), Vector2(0.5, 0.5))
-                        BFMeshUtilS.add_box(st_trim, dxf * Transform3D(Basis.IDENTITY, Vector3(dw * 0.5 + 0.04, 0, 0)), Vector3(0.06, dh, 0.16), Vector2(0.5, 0.5))
-                        BFMeshUtilS.add_box(st_wood, dxf, Vector3(0.04, dh - 0.06, dw - 0.02), Vector2(0.5, 0.5))
+                        var dxf := Transform3D(bdoor, Vector3(mc.x, base + finish_top + dh * 0.5, mc.y))
+                        BFMeshUtilS.add_box(st_trim, dxf * Transform3D(Basis.IDENTITY, Vector3(0, dh * 0.5 - 0.03, 0)), Vector3(0.16, 0.06, dw + 0.08), Vector2(0.5, 0.5))
+                        BFMeshUtilS.add_box(st_trim, dxf * Transform3D(Basis.IDENTITY, Vector3(0, 0, -(dw * 0.5 + 0.03))), Vector3(0.16, dh, 0.06), Vector2(0.5, 0.5))
+                        BFMeshUtilS.add_box(st_trim, dxf * Transform3D(Basis.IDENTITY, Vector3(0, 0, dw * 0.5 + 0.03)), Vector3(0.16, dh, 0.06), Vector2(0.5, 0.5))
+                        BFMeshUtilS.add_box(st_wood, dxf * Transform3D(Basis.IDENTITY, Vector3(0, -0.03, 0)), Vector3(0.04, dh - 0.06, dw - 0.02), Vector2(0.5, 0.5))
         # room floor finishes + props
         var st_fin_wood := surfaces_for(surfaces, "wood_floor", style)
         var st_fin_tile := surfaces_for(surfaces, "tile_floor", style)

@@ -194,7 +194,7 @@ func _tour_building(entry: Dictionary, idx: int) -> Dictionary:
         fill.light_energy = 0.0  # off for exteriors
         cam.add_child(fill)
         for i in 6:
-                var a := TAU * float(i) / 6.0
+                var a := TAU * float(i) / 6.0 + 0.523  # 30 deg offset: face-on views of both axes
                 cam.position = Vector3(cos(a) * radius, ext_h, sin(a) * radius)
                 cam.look_at(Vector3(0, ext_h * 0.35, 0))
                 for f in 3:
