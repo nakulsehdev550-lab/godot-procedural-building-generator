@@ -32,10 +32,10 @@ static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFPar
                 if fp.is_circular:
                         # tessellated edges vary in length -> use a FIXED window
                         # size at even arc spacing so the band reads consistent
-                        var ww := minf(p.window_width, 1.6)
+                        var ww: float = minf(minf(p.window_width, 1.6), elen - 0.45)
                         var v1c := p.window_sill
                         var v2c := minf(p.window_sill + p.window_height, wall_h - 0.18)
-                        if v2c - v1c >= 0.4 and elen >= ww + 0.7:
+                        if v2c - v1c >= 0.4 and ww >= 0.6:
                                 var spacing := maxf(ww + 1.1, 2.2)
                                 var n_c := maxi(1, int(round(elen / spacing)))
                                 for k in n_c:

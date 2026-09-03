@@ -219,11 +219,12 @@ static func _build_spiral(st: SurfaceTool, st_trim: SurfaceTool, plan_d: Diction
                 ang = a1
                 var r_in := 0.12
                 var r_out := R
-                # wedge approximated by a rotated box spanning mid-angle
+                # wedge approximated by a rotated box spanning mid-angle,
+                # orbiting the POLE (cell center), not the cell corner
                 var mid := (a0 + a1) * 0.5
                 var span := (a1 - a0) * (r_out + r_in) * 0.5
-                var step_xf := Transform3D(Basis(Vector3.UP, mid), Vector3(0, y0 + riser * 0.5 + 0.02, 0))
-                step_xf = _rotated_step(step_xf, mid, (r_in + r_out) * 0.5)
+                var step_xf := _rotated_step(Transform3D(Basis.IDENTITY,
+                        Vector3(c_local.x, y0 + riser * 0.5 + 0.02, c_local.z)), mid, (r_in + r_out) * 0.5)
                 # box local +Z (radial depth) must map to the radial direction
                 # at angle `mid`: rotation = PI/2 - mid  (was mid + PI/2: the
                 # box's radial axis pointed at -mid, scrambling the helix)
@@ -244,7 +245,7 @@ static func _build_spiral(st: SurfaceTool, st_trim: SurfaceTool, plan_d: Diction
 
 
 static func _rotated_step(xfm: Transform3D, mid: float, rmid: float) -> Transform3D:
-        var pos := Vector3(cos(mid) * rmid, xfm.origin.y, sin(mid) * rmid)
+        var pos := Vector3(xfm.origin.x + cos(mid) * rmid, xfm.origin.y, xfm.origin.z + sin(mid) * rmid)
         return Transform3D(Basis(Vector3.UP, PI * 0.5 - mid), pos)
 
 

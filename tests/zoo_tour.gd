@@ -185,7 +185,7 @@ func _tour_building(entry: Dictionary, idx: int) -> Dictionary:
         var fp: BFFootprint = b.params.footprint
         var sz := fp.size_xz()
         var ext_h: float = clampf(b.params.floors * b.params.floor_height * 0.55, 5.0, 30.0)
-        var radius: float = maxf(sz.x, sz.y) * 1.6 + 6.0
+        var radius: float = maxf(sz.x, sz.y) * 1.15 + 7.0
         var cam := Camera3D.new()
         root.add_child(cam)
         cam.current = true
