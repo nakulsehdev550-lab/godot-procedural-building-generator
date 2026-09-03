@@ -24,7 +24,7 @@
         "shots": 5
       }
     ],
-    "stats": "floors=2  tris=7_410  parts=57  21.6 ms"
+    "stats": "floors=2  tris=7_422  parts=57  22.2 ms"
   },
   {
     "floors": 1,
@@ -42,7 +42,7 @@
         "shots": 5
       }
     ],
-    "stats": "floors=1  tris=3_728  parts=29  12.4 ms"
+    "stats": "floors=1  tris=3_740  parts=29  12.2 ms"
   },
   {
     "floors": 2,
@@ -71,7 +71,7 @@
         "shots": 6
       }
     ],
-    "stats": "floors=2  tris=10_940  parts=75  33.6 ms"
+    "stats": "floors=2  tris=10_964  parts=75  34.0 ms"
   },
   {
     "floors": 5,
@@ -131,7 +131,7 @@
         "shots": 10
       }
     ],
-    "stats": "floors=5  tris=47_560  parts=344  149.0 ms"
+    "stats": "floors=5  tris=47_560  parts=344  150.5 ms"
   },
   {
     "floors": 3,
@@ -165,7 +165,7 @@
         "shots": 3
       }
     ],
-    "stats": "floors=3  tris=9_514  parts=60  43.5 ms"
+    "stats": "floors=3  tris=9_514  parts=60  49.8 ms"
   },
   {
     "floors": 6,
@@ -240,7 +240,7 @@
         "shots": 10
       }
     ],
-    "stats": "floors=6  tris=82_018  parts=374  298.2 ms"
+    "stats": "floors=6  tris=82_018  parts=374  294.8 ms"
   },
   {
     "floors": 8,
@@ -283,7 +283,7 @@
         "shots": 10
       }
     ],
-    "stats": "floors=8  tris=98_034  parts=516  322.6 ms"
+    "stats": "floors=8  tris=98_130  parts=516  301.5 ms"
   },
   {
     "floors": 2,
@@ -311,7 +311,7 @@
         "shots": 5
       }
     ],
-    "stats": "floors=2  tris=9_150  parts=63  28.3 ms"
+    "stats": "floors=2  tris=9_150  parts=63  27.6 ms"
   },
   {
     "floors": 2,
@@ -377,7 +377,7 @@
         "shots": 8
       }
     ],
-    "stats": "floors=3  tris=19_612  parts=138  60.2 ms"
+    "stats": "floors=3  tris=19_612  parts=138  61.2 ms"
   },
   {
     "floors": 10,
@@ -417,7 +417,7 @@
         "shots": 10
       }
     ],
-    "stats": "floors=10  tris=67_586  parts=549  217.4 ms"
+    "stats": "floors=10  tris=67_586  parts=549  220.5 ms"
   },
   {
     "floors": 2,
@@ -446,6 +446,6 @@
         "shots": 7
       }
     ],
-    "stats": "floors=2  tris=10_152  parts=64  31.5 ms"
+    "stats": "floors=2  tris=10_200  parts=64  32.5 ms"
   }
 ]

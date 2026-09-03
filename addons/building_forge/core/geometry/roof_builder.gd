@@ -353,6 +353,10 @@ static func _build_dome(st: SurfaceTool, fp: BFFootprint, base_y: float, tile: V
         var c := fp.center_xz()
         var sz := fp.size_xz()
         var r := maxf(sz.x, sz.y) * 0.5
+        # squash along the short axis so an oval drum gets an ELLIPSOID dome
+        # (a circular dome on an oval drum floats over the narrow ends)
+        var fz := clampf(sz.y / maxf(sz.x, 0.01), 0.5, 1.0)
+        var fx := 1.0
         var rings := 8
         var segs := maxi(20, fp.points.size())
         for ri in rings:
@@ -361,10 +365,10 @@ static func _build_dome(st: SurfaceTool, fp: BFFootprint, base_y: float, tile: V
                 for si in segs:
                         var a0 := TAU * float(si) / float(segs)
                         var a1 := TAU * float(si + 1) / float(segs)
-                        var p00 := _sph(c, r, phi0, a0, base_y)
-                        var p01 := _sph(c, r, phi0, a1, base_y)
-                        var p10 := _sph(c, r, phi1, a0, base_y)
-                        var p11 := _sph(c, r, phi1, a1, base_y)
+                        var p00 := _sph_x(c, r, phi0, a0, base_y, fx, fz)
+                        var p01 := _sph_x(c, r, phi0, a1, base_y, fx, fz)
+                        var p10 := _sph_x(c, r, phi1, a0, base_y, fx, fz)
+                        var p11 := _sph_x(c, r, phi1, a1, base_y, fx, fz)
                         var nrm := (p00 + p01 + p10 + p11 - Vector3(c.x, base_y, c.y) * 4.0).normalized()
                         BFMeshUtilS.add_quad(st, [p00, p01, p11, p10], nrm,
                                 [Vector2(a0 * r * tile.x, phi0 * r * tile.y), Vector2(a1 * r * tile.x, phi0 * r * tile.y),
@@ -374,3 +378,7 @@ static func _build_dome(st: SurfaceTool, fp: BFFootprint, base_y: float, tile: V
 
 static func _sph(c: Vector2, r: float, phi: float, a: float, base_y: float) -> Vector3:
         return Vector3(c.x + cos(a) * sin(phi) * r, base_y + cos(phi) * r, c.y + sin(a) * sin(phi) * r)
+
+
+static func _sph_x(c: Vector2, r: float, phi: float, a: float, base_y: float, fx: float, fz: float) -> Vector3:
+        return Vector3(c.x + cos(a) * sin(phi) * r * fx, base_y + cos(phi) * r, c.y + sin(a) * sin(phi) * r * fz)

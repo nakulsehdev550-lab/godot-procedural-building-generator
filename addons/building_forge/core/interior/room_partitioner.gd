@@ -130,14 +130,15 @@ static func partition(bounds: Rect2, interior_pts: PackedVector2Array, stair_cel
                                 walls.append(seg)
                                 if _shared_wall(ra.rect, rb.rect, 1.2) != null:
                                         adj["%d|%d" % [ra.id, rb.id]] = seg
-        # boundary walls: only where the edge faces an INTERIOR void (stair shaft
-        # remainder / unpartitioned sliver). Edges along the facade are sealed by
-        # the exterior band itself and must stay open to it.
+        # boundary walls: every room edge NOT along the facade must carry a
+        # wall. Shared seams got one above; uncovered sub-spans (void faces,
+        # stair shaft remainders, misaligned shrink-fit neighbours) are sealed
+        # here so rooms never have holes.
         for ra in rooms:
                 for side in 4:
-                        var seg2 := _boundary_wall(ra, rooms, side, interior_pts)
-                        if seg2 != null:
-                                seg2.room_a = ra.id
+                        var fill: Array = _boundary_wall(ra, side, interior_pts, walls)
+                        for seg2 in fill:
+                                (seg2 as WallSeg).room_a = ra.id
                                 walls.append(seg2)
         # doors: spanning tree from the stair hall -> every room reachable
         if rooms.size() > 0:
@@ -249,49 +250,74 @@ static func _shared_wall(ra: Rect2, rb: Rect2, min_len := 1.2) -> WallSeg:
         return null
 
 
-## Room edge that faces an interior void (not another room, and the probe
-## stays INSIDE the interior polygon). Facade-facing edges return null: the
-## exterior wall band is the wall there, and rooms must open onto it.
-static func _boundary_wall(ra: Room, rooms: Array, side: int, interior_pts: PackedVector2Array) -> WallSeg:
+## Seals every uncovered sub-span of a room edge (not along the facade -
+## the exterior band is the wall there and rooms must open onto it).
+## Returns the WallSegs to append (may be empty / several).
+static func _boundary_wall(ra: Room, side: int, interior_pts: PackedVector2Array, walls: Array) -> Array:
         var r := ra.rect
-        var seg: WallSeg = null
+        var a := Vector2.ZERO
+        var b := Vector2.ZERO
+        var outward := Vector2.ZERO
         match side:
                 0:
-                        if _edge_facing_void(Vector2(r.get_center().x, r.position.y), Vector2(0, -1), rooms, ra, interior_pts):
-                                seg = WallSeg.new()
-                                seg.a = Vector2(r.position.x, r.position.y)
-                                seg.b = Vector2(r.end.x, r.position.y)
+                        a = Vector2(r.position.x, r.position.y)
+                        b = Vector2(r.end.x, r.position.y)
+                        outward = Vector2(0, -1)
                 1:
-                        if _edge_facing_void(Vector2(r.end.x, r.get_center().y), Vector2(1, 0), rooms, ra, interior_pts):
-                                seg = WallSeg.new()
-                                seg.a = Vector2(r.end.x, r.position.y)
-                                seg.b = Vector2(r.end.x, r.end.y)
+                        a = Vector2(r.end.x, r.position.y)
+                        b = Vector2(r.end.x, r.end.y)
+                        outward = Vector2(1, 0)
                 2:
-                        if _edge_facing_void(Vector2(r.get_center().x, r.end.y), Vector2(0, 1), rooms, ra, interior_pts):
-                                seg = WallSeg.new()
-                                seg.a = Vector2(r.end.x, r.end.y)
-                                seg.b = Vector2(r.position.x, r.end.y)
+                        a = Vector2(r.end.x, r.end.y)
+                        b = Vector2(r.position.x, r.end.y)
+                        outward = Vector2(0, 1)
                 3:
-                        if _edge_facing_void(Vector2(r.position.x, r.get_center().y), Vector2(-1, 0), rooms, ra, interior_pts):
-                                seg = WallSeg.new()
-                                seg.a = Vector2(r.position.x, r.end.y)
-                                seg.b = Vector2(r.position.x, r.position.y)
-        return seg
+                        a = Vector2(r.position.x, r.end.y)
+                        b = Vector2(r.position.x, r.position.y)
+                        outward = Vector2(-1, 0)
+        if Geometry2D.is_point_in_polygon((a + b) * 0.5 + outward * 0.3, interior_pts) == false:
+                return []  # facade side: exterior band covers it
+        var spans := _uncovered_spans(a, b, walls)
+        var out: Array = []
+        for sp in spans:
+                if sp.y - sp.x >= 0.35:
+                        var seg := WallSeg.new()
+                        seg.a = a.lerp(b, sp.x)
+                        seg.b = a.lerp(b, sp.y)
+                        out.append(seg)
+        return out
 
 
-static func _edge_facing_void(edge_center: Vector2, outward: Vector2, rooms: Array, self_room: Room, interior_pts: PackedVector2Array) -> bool:
-        # outside the interior polygon -> that's the exterior wall, not a void
-        if not Geometry2D.is_point_in_polygon(edge_center + outward * 0.3, interior_pts):
-                return false
-        # is there another room on the other side of this edge center?
-        for d: Vector2 in [outward * 0.3, Vector2(0.3, 0), Vector2(-0.3, 0), Vector2(0, 0.3), Vector2(0, -0.3)]:
-                var p := edge_center + d
-                for rb in rooms:
-                        if rb == self_room:
-                                continue
-                        if (rb as Room).rect.has_point(p):
-                                return false
-        return true
+## Returns covered-normalized free intervals [t0,t1] of segment a->b given
+## collinear walls in the list.
+static func _uncovered_spans(a: Vector2, b: Vector2, walls: Array) -> Array:
+        var d := b - a
+        var l := d.length()
+        if l < 0.01:
+                return []
+        var dn := d / l
+        var ivals: Array = []
+        for s in walls:
+                var seg := s as WallSeg
+                var rel_a := seg.a - a
+                var rel_b := seg.b - a
+                if absf(rel_a.cross(dn)) > 0.06 or absf(rel_b.cross(dn)) > 0.06:
+                        continue
+                var ua := clampf(rel_a.dot(dn) / l, 0.0, 1.0)
+                var ub := clampf(rel_b.dot(dn) / l, 0.0, 1.0)
+                if absf(ua - ub) < 0.001:
+                        continue
+                ivals.append([minf(ua, ub), maxf(ua, ub)])
+        ivals.sort_custom(func(x, y): return x[0] < y[0])
+        var out: Array = []
+        var cur := 0.0
+        for iv in ivals:
+                if iv[0] > cur + 0.001:
+                        out.append(Vector2(cur, iv[0]))
+                cur = maxf(cur, iv[1])
+        if cur < 1.0 - 0.001:
+                out.append(Vector2(cur, 1.0))
+        return out
 
 
 ## Door-edge soft prohibitions (from floor-plan research): these pairs get
