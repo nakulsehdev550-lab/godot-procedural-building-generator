@@ -175,10 +175,12 @@ static func add_railing(st: SurfaceTool, a: Vector3, b: Vector3, base_y: float, 
         add_box(st, mid2, Vector3(len_m, thickness * 0.7, thickness * 0.7), tile)
 
 
-## Finalizes a SurfaceTool into an ArrayMesh with flat normals.
+## Finalizes a SurfaceTool into an ArrayMesh.
+## NOTE: normals are set explicitly by all builders (Godot convention:
+## normal = outward, winding = CW front) - do NOT call generate_normals()
+## here, it averages normals across faces and ruins flat-shaded walls.
 ## Returns null when the tool has no geometry.
 static func commit(st: SurfaceTool, mat: Material = null) -> ArrayMesh:
-        st.generate_normals()
         st.index()
         var mesh := st.commit()
         if mesh == null or mesh.get_surface_count() == 0:

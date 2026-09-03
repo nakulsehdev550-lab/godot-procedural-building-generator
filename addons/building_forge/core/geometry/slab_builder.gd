@@ -46,6 +46,9 @@ static func _signed_area(poly: PackedVector2Array) -> float:
 
 
 ## Subtracts rect holes from polygon. Returns array of hole-free CCW polygons.
+## NOTE: Clipper (clip_polygons) returns solid pieces with the input
+## orientation and HOLE pieces with the OPPOSITE orientation - holes must be
+## discarded, not filled back in.
 static func minus_holes(poly: PackedVector2Array, holes: Array) -> Array:
         var pieces: Array = [poly]
         for h in holes:
@@ -56,13 +59,12 @@ static func minus_holes(poly: PackedVector2Array, holes: Array) -> Array:
                 for p in pieces:
                         var res := Geometry2D.clip_polygons(p, _rect_poly(hr))
                         for rp in res:
-                                if rp.size() >= 3 and absf(_signed_area(rp)) > 0.01:
+                                if rp.size() >= 3 and _signed_area(rp) > 0.01:
                                         next_pieces.append(rp)
                 pieces = next_pieces
-        # normalize winding to CCW
         var out: Array = []
         for p in pieces:
-                if p.size() >= 3:
+                if p.size() >= 3 and _signed_area(p) > 0.01:
                         if Geometry2D.is_polygon_clockwise(p):
                                 p.reverse()
                         out.append(p)

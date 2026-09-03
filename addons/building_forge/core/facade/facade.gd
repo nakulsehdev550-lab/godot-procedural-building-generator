@@ -22,7 +22,24 @@ static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFPar
         for e in fp.edge_count():
                 var list: Array = []
                 var elen := fp.edge_length(e)
-                if fp.is_circular and elen < 1.6:
+                # circular footprints: tessellated edges are short -> one window per
+                # edge, sized to the edge (curtain style falls back to punched)
+                if fp.is_circular:
+                        if elen < 1.0:
+                                continue
+                        var ww := minf(p.window_width, elen - 0.55)
+                        if ww < 0.5:
+                                continue
+                        var v1c := p.window_sill
+                        var v2c := minf(p.window_sill + p.window_height, wall_h - 0.18)
+                        if v2c - v1c < 0.4:
+                                continue
+                        list.append({"u1": (elen - ww) * 0.5, "u2": (elen + ww) * 0.5, "v1": v1c, "v2": v2c, "kind": "window"})
+                        if e == entrance_edge and not skip_entrance:
+                                list.clear()
+                                var dw2 := p.door_width
+                                list.append({"u1": elen * 0.5 - dw2 * 0.5, "u2": elen * 0.5 + dw2 * 0.5, "v1": 0.0, "v2": p.door_height, "kind": "door"})
+                        openings[e] = list
                         continue
                 match p.window_style:
                         BFParams.WindowStyle.CURTAIN:

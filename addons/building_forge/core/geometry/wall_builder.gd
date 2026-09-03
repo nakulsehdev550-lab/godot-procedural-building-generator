@@ -36,7 +36,8 @@ static func inner_polygon(outer: PackedVector2Array, thickness: float) -> Packed
                 var n0 := Vector2(d0.y, -d0.x)  # outward normals (CCW polygon)
                 var n1 := Vector2(d1.y, -d1.x)
                 var cr := d0.cross(d1)
-                if absf(cr) < 0.0005:
+                if absf(cr) < 0.08:
+                        # near-parallel edges (common on tessellated circles): simple offset
                         inner[i] = v - n0 * thickness
                         continue
                 # Offset lines: L0: X = v - n0*t + s*d0 ; L1: X = v - n1*t + r*d1

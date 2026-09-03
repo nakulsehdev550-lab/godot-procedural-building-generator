@@ -118,6 +118,8 @@ func generate() -> void:
         for i in n_floors:
                 var base := float(i) * fh
                 var wall_h := fh - 0.3 if i > 0 else fh - 0.12
+                var wall_base := base - 0.01
+                var wall_h2 := wall_h + 0.02
                 var floor_node := Node3D.new()
                 floor_node.name = "Floor_%02d" % i
                 root.add_child(floor_node)
@@ -128,12 +130,12 @@ func generate() -> void:
                         m3d.name = "Shell"
                         floor_node.add_child(m3d)
                 var open := BFFacadeS.layout_floor(fp, base, wall_h, params, rng)
-                tri_count += _build_exterior(floor_node, surfaces, fp, base, wall_h, t, open, rng)
+                tri_count += _build_exterior(floor_node, surfaces, fp, wall_base, wall_h2, wall_h, t, open, rng)
                 if params.generate_interior:
                         tri_count += _build_interior(floor_node, surfaces, fp, inner_fp, base, fh, wall_h, t, stair_cell, stair_hole, plan_d, i, rng)
                 # slab above this floor (ceiling / next floor base)
                 var slab_st := surfaces_for(surfaces, "concrete", style_dir)
-                BFSlabBuilderS.build_slab(slab_st, fp.points, base + fh - 0.3, base + fh, Rect2(), Vector2(0.5, 0.5), false, [stair_hole] if i < n_floors - 1 else [])
+                BFSlabBuilderS.build_slab(slab_st, fp.points, base + fh - 0.301, base + fh, Rect2(), Vector2(0.5, 0.5), false, [stair_hole] if i < n_floors - 1 else [])
                 # floor finish on ground
                 if i == 0:
                         BFSlabBuilderS.build_slab(surfaces_for(surfaces, "wood_floor", style_dir), inner, base + 0.001, base + 0.021, Rect2(), Vector2(0.5, 0.5), true)
@@ -159,7 +161,7 @@ func surfaces_for(surfaces: Dictionary, mat_id: String, _style: String) -> Surfa
 
 
 func _build_exterior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, base: float,
-                wall_h: float, t: float, openings: Dictionary, rng: RandomNumberGenerator) -> int:
+        build_h: float, logic_h: float, t: float, openings: Dictionary, rng: RandomNumberGenerator) -> int:
         var p := params
         var style := p.texture_style_dir
         var st_wall := surfaces_for(surfaces, p.facade_material, style)
@@ -167,7 +169,7 @@ func _build_exterior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
         var st_glass := surfaces_for(surfaces, "__glass", style)
         var st_door := surfaces_for(surfaces, "wood_dark", style)
         var st_concrete := surfaces_for(surfaces, "concrete", style)
-        BFWallBuilderS.build_walls(st_wall, fp, base, wall_h, t, _to_wall_openings(openings), Vector2(0.5, 0.5))
+        BFWallBuilderS.build_walls(st_wall, fp, base, build_h, t, _to_wall_openings(openings), Vector2(0.5, 0.5))
         # facade elements
         var n := fp.edge_count()
         var curtain := p.window_style == BFParams.WindowStyle.CURTAIN
@@ -262,8 +264,8 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                 var mid := (s.a + s.b) * 0.5
                 var basis := Basis(Vector3(d.x, 0, d.y), Vector3.UP, Vector3(-d.y, 0, d.x))
                 if s.door.is_empty():
-                        var xf := Transform3D(basis, Vector3(mid.x, base + wall_h * 0.5, mid.y))
-                        BFMeshUtilS.add_box(st_int, xf, Vector3(l, wall_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
+                        var xf := Transform3D(basis, Vector3(mid.x, base + wall_h * 0.5 + 0.01, mid.y))
+                        BFMeshUtilS.add_box(st_int, xf, Vector3(l, wall_h + 0.02, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
                 else:
                         var da: Vector2 = s.door.a
                         var db: Vector2 = s.door.b

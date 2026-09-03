@@ -20,8 +20,8 @@ const DEFAULT_DIR := "res://addons/building_forge/textures/baked"
 const RECIPES := {
 	"brick_red": {"size": 1024, "tile": 2.0, "fn": "brick", "base": Color(0.48, 0.23, 0.16), "var": 0.16, "mortar": Color(0.62, 0.60, 0.56), "rows": 22, "rough": 0.85},
 	"brick_gray": {"size": 512, "tile": 2.0, "fn": "brick", "base": Color(0.42, 0.41, 0.40), "var": 0.13, "mortar": Color(0.60, 0.59, 0.57), "rows": 22, "rough": 0.85},
-	"plaster_ext": {"size": 1024, "tile": 3.0, "fn": "stucco", "base": Color(0.87, 0.84, 0.78), "rough": 0.75},
-	"plaster_int": {"size": 512, "tile": 3.0, "fn": "stucco", "base": Color(0.91, 0.90, 0.88), "rough": 0.82, "fine": true, "speckle": false},
+	"plaster_ext": {"size": 1024, "tile": 3.0, "fn": "stucco", "base": Color(0.80, 0.75, 0.66), "rough": 0.9},
+	"plaster_int": {"size": 512, "tile": 3.0, "fn": "stucco", "base": Color(0.87, 0.85, 0.81), "rough": 0.9, "fine": true, "speckle": false},
 	"concrete": {"size": 1024, "tile": 3.0, "fn": "concrete", "base": Color(0.62, 0.62, 0.61), "rough": 0.72},
 	"wood_floor": {"size": 1024, "tile": 2.0, "fn": "planks", "base": Color(0.55, 0.38, 0.22), "planks": 13, "rough": 0.55},
 	"wood_dark": {"size": 512, "tile": 1.0, "fn": "grain", "base": Color(0.28, 0.18, 0.11), "rough": 0.45},

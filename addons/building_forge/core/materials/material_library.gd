@@ -43,7 +43,7 @@ const FLAT_COLORS := {  # fallback when a texture set is missing
 	"metal": Color(0.7, 0.71, 0.72), "metal_dark": Color(0.28, 0.29, 0.31),
 	"porcelain": Color(0.94, 0.94, 0.93), "appliance": Color(0.87, 0.88, 0.89),
 	"trim_white": Color(0.92, 0.91, 0.89),
-	"glass": Color(0.7, 0.82, 0.88, 0.32), "glass_dark": Color(0.1, 0.14, 0.17, 0.6),
+	"glass": Color(0.5, 0.65, 0.72, 0.45), "glass_dark": Color(0.09, 0.12, 0.15, 0.68),
 }
 
 static var _cache: Dictionary = {}
@@ -99,12 +99,10 @@ static func get_glass(dark := false) -> StandardMaterial3D:
 	mat.resource_name = id
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.albedo_color = FLAT_COLORS.get(id, Color(0.7, 0.85, 0.9, 0.3))
-	mat.roughness = 0.04
-	mat.metallic = 0.35
-	mat.metallic_specular = 0.9
+	mat.roughness = 0.07
+	mat.metallic = 0.15
+	mat.metallic_specular = 0.6
 	mat.cull_mode = BaseMaterial3D.CULL_BACK
-	mat.clearcoat_enabled = true
-	mat.clearcoat = 0.6
 	_cache[id] = mat
 	return mat
 
