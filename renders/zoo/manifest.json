@@ -1,0 +1,429 @@
+[
+  {
+    "floors": 2,
+    "name": "suburban_house",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "kitchen": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 4
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 2,
+          "lounge": 1,
+          "stair": 1
+        },
+        "shots": 5
+      }
+    ],
+    "stats": "floors=2  tris=7_410  parts=57  22.6 ms"
+  },
+  {
+    "floors": 1,
+    "name": "stone_cottage",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 3
+      }
+    ],
+    "stats": "floors=1  tris=2_584  parts=22  8.8 ms"
+  },
+  {
+    "floors": 2,
+    "name": "modern_villa",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 1,
+          "dining": 1,
+          "kitchen": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 6
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 2,
+          "lounge": 2,
+          "stair": 1
+        },
+        "shots": 6
+      }
+    ],
+    "stats": "floors=2  tris=10_928  parts=75  35.9 ms"
+  },
+  {
+    "floors": 5,
+    "name": "brick_apartment",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 8,
+          "dining": 1,
+          "kitchen": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 10
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 9,
+          "office": 1,
+          "stair": 1
+        },
+        "shots": 10
+      },
+      {
+        "floor": 2,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 9,
+          "office": 1,
+          "stair": 1
+        },
+        "shots": 10
+      },
+      {
+        "floor": 3,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 11,
+          "lounge": 1,
+          "stair": 1
+        },
+        "shots": 10
+      },
+      {
+        "floor": 4,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 9,
+          "lounge": 1,
+          "office": 1,
+          "stair": 1
+        },
+        "shots": 10
+      }
+    ],
+    "stats": "floors=5  tris=47_464  parts=344  157.3 ms"
+  },
+  {
+    "floors": 3,
+    "name": "townhouse_tall",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 3
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 1,
+          "stair": 1
+        },
+        "shots": 3
+      },
+      {
+        "floor": 2,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 1,
+          "stair": 1
+        },
+        "shots": 3
+      }
+    ],
+    "stats": "floors=3  tris=9_514  parts=60  44.9 ms"
+  },
+  {
+    "floors": 6,
+    "name": "round_tower",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "dining": 1,
+          "kitchen": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 5
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 2,
+          "office": 1,
+          "stair": 1
+        },
+        "shots": 5
+      },
+      {
+        "floor": 2,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 2,
+          "office": 1,
+          "stair": 1
+        },
+        "shots": 5
+      },
+      {
+        "floor": 3,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 2,
+          "lounge": 1,
+          "stair": 1
+        },
+        "shots": 5
+      },
+      {
+        "floor": 4,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 2,
+          "lounge": 1,
+          "stair": 1
+        },
+        "shots": 5
+      },
+      {
+        "floor": 5,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 2,
+          "lounge": 1,
+          "stair": 1
+        },
+        "shots": 5
+      }
+    ],
+    "stats": "floors=6  tris=44_506  parts=177  139.8 ms"
+  },
+  {
+    "floors": 8,
+    "name": "office_tower_u",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "dining": 1,
+          "lounge": 1,
+          "office": 9,
+          "stair": 1
+        },
+        "shots": 10
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "dining": 1,
+          "lounge": 1,
+          "office": 7,
+          "stair": 1
+        },
+        "shots": 10
+      },
+      {
+        "floor": 7,
+        "kinds": {
+          "bath": 1,
+          "dining": 1,
+          "lounge": 1,
+          "office": 7,
+          "stair": 1
+        },
+        "shots": 10
+      }
+    ],
+    "stats": "floors=8  tris=81_974  parts=439  252.6 ms"
+  },
+  {
+    "floors": 2,
+    "name": "tshape_family",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "dining": 1,
+          "kitchen": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 5
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 2,
+          "lounge": 1,
+          "stair": 1
+        },
+        "shots": 5
+      }
+    ],
+    "stats": "floors=2  tris=9_150  parts=63  27.5 ms"
+  },
+  {
+    "floors": 2,
+    "name": "oval_villa",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "stair": 1
+        },
+        "shots": 1
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "stair": 1
+        },
+        "shots": 1
+      }
+    ],
+    "stats": "floors=2  tris=3_546  parts=14  9.7 ms"
+  },
+  {
+    "floors": 3,
+    "name": "apartment_dogleg",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 3,
+          "dining": 1,
+          "kitchen": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 8
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 5,
+          "office": 1,
+          "stair": 1
+        },
+        "shots": 8
+      },
+      {
+        "floor": 2,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 3,
+          "lounge": 2,
+          "stair": 1
+        },
+        "shots": 7
+      }
+    ],
+    "stats": "floors=3  tris=19_054  parts=133  60.0 ms"
+  },
+  {
+    "floors": 10,
+    "name": "penthouse_tower",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 6,
+          "dining": 1,
+          "kitchen": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 10
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 7,
+          "lounge": 1,
+          "stair": 1
+        },
+        "shots": 10
+      },
+      {
+        "floor": 9,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 6,
+          "lounge": 1,
+          "office": 1,
+          "stair": 1
+        },
+        "shots": 10
+      }
+    ],
+    "stats": "floors=10  tris=67_406  parts=549  227.9 ms"
+  },
+  {
+    "floors": 2,
+    "name": "freeform_house",
+    "rooms": [
+      {
+        "floor": 0,
+        "kinds": {
+          "bath": 1,
+          "living": 1,
+          "stair": 1
+        },
+        "shots": 3
+      },
+      {
+        "floor": 1,
+        "kinds": {
+          "bath": 1,
+          "bedroom": 1,
+          "stair": 1
+        },
+        "shots": 3
+      }
+    ],
+    "stats": "floors=2  tris=5_948  parts=42  17.5 ms"
+  }
+]

@@ -52,31 +52,51 @@ static func partition(bounds: Rect2, interior_pts: PackedVector2Array, stair_cel
                 rooms.append(sr)
         var queue: Array = [bounds.grow(-0.02)]
         var guard := 0
+        # curved footprints need softer minimums or every candidate dies to
+        # the size gates and the floor ends up with no rooms at all
+        var min_room := MIN_ROOM
+        var min_dim := MIN_ROOM - 0.2
+        var poly_area := 0.0
+        for i in interior_pts.size():
+                var p0 := interior_pts[i]
+                var p1 := interior_pts[(i + 1) % interior_pts.size()]
+                poly_area += p0.x * p1.y - p1.x * p0.y
+        poly_area = absf(poly_area) * 0.5
+        if bounds.get_area() > 0.0 and poly_area < bounds.get_area() * 0.92:
+                min_room = 1.7
+                min_dim = 1.5
         while queue.is_empty() == false and guard < 8192:
                 guard += 1
                 var r: Rect2 = queue.pop_back()
-                if r.get_area() < 1.2 or r.size.x < MIN_ROOM - 0.4 or r.size.y < MIN_ROOM - 0.4:
+                if r.get_area() < 1.2 or r.size.x < min_dim - 0.2 or r.size.y < min_dim - 0.2:
                         continue
                 # rooms must fit the real interior polygon
                 if not rect_in_polygon(r, interior_pts):
-                        # keep carving: split into quadrants and test each
-                        var hx := r.size.x * 0.5
-                        var hy := r.size.y * 0.5
-                        queue.append(Rect2(r.position, Vector2(hx, hy)))
-                        queue.append(Rect2(r.position + Vector2(hx, 0), Vector2(hx, hy)))
-                        queue.append(Rect2(r.position + Vector2(0, hy), Vector2(hx, hy)))
-                        queue.append(Rect2(r.position + Vector2(hx, hy), Vector2(hx, hy)))
+                        var splittable := r.size.x > min_room * 2.5 and r.size.y > min_room * 2.5 \
+                                and r.get_area() > max_room_area
+                        if not splittable:
+                                # curved / odd footprint lobe: shrink toward the
+                                # center - finds rooms the quadrant grid never
+                                # would (e.g. ellipse side lobes)
+                                var fitted := _shrink_to_fit(r, interior_pts, min_dim)
+                                if fitted.get_area() > 0.0 and fitted.get_area() <= max_room_area * 1.5:
+                                        fitted = _nudge_to_connect(fitted, rooms, stair_cell)
+                                        if fitted.get_area() > 0.0 and not _overlaps_rooms(fitted, rooms):
+                                                queue.append(fitted)
+                                                continue
+                        _quad_split(r, queue)
                         continue
                 var inter := r.intersection(stair_cell)
                 if inter.get_area() > 0.3:
                         # carve strips around the stair cell; the cell itself
                         # belongs to the pre-created stair room
-                        var cuts := _cuts_around(r, stair_cell)
+                        var cuts := _cuts_around(r, stair_cell, min_room)
                         for c in cuts:
                                 queue.append(c)
                         continue
-                if r.get_area() <= max_room_area or r.size.x < MIN_ROOM * 2.0 or r.size.y < MIN_ROOM * 2.0:
-                        if r.size.x >= MIN_ROOM - 0.2 and r.size.y >= MIN_ROOM - 0.2:
+                var thin := r.size.x < MIN_ROOM * 2.0 or r.size.y < MIN_ROOM * 2.0
+                if r.get_area() <= max_room_area or (thin and r.get_area() <= max_room_area * 1.5):
+                        if r.size.x >= min_dim and r.size.y >= min_dim and not _overlaps_rooms(r, rooms):
                                 var room := Room.new()
                                 room.rect = r
                                 room.id = next_id
@@ -142,22 +162,58 @@ static func rect_in_polygon(r: Rect2, pts: PackedVector2Array, margin := 0.14) -
         return true
 
 
-static func _cuts_around(r: Rect2, cell: Rect2) -> Array:
+## True when the rect overlaps any accepted room (shrink-fit candidates from
+## neighbouring quads can converge on the same lobe).
+static func _overlaps_rooms(r: Rect2, rooms: Array) -> bool:
+        for other in rooms:
+                var inter := r.intersection((other as Room).rect)
+                if inter.get_area() > 0.2:
+                        return true
+        return false
+
+
+## Splits a rect into 4 quadrants and appends them to the queue.
+static func _quad_split(r: Rect2, queue: Array) -> void:
+        var hx := r.size.x * 0.5
+        var hy := r.size.y * 0.5
+        queue.append(Rect2(r.position, Vector2(hx, hy)))
+        queue.append(Rect2(r.position + Vector2(hx, 0), Vector2(hx, hy)))
+        queue.append(Rect2(r.position + Vector2(0, hy), Vector2(hx, hy)))
+        queue.append(Rect2(r.position + Vector2(hx, hy), Vector2(hx, hy)))
+
+
+## Shrinks a rect toward its center until it fits the polygon, trying a few
+## aspect variants (square-ish / wide / tall) so curved lobes get covered.
+## Returns Rect2() when nothing above the minimum room size fits.
+static func _shrink_to_fit(r: Rect2, pts: PackedVector2Array, min_dim := 1.6) -> Rect2:
+        var c := r.get_center()
+        for sc in [0.85, 0.7, 0.58, 0.48, 0.4, 0.33]:
+                for f in [Vector2(1, 1), Vector2(1, 0.62), Vector2(0.62, 1), Vector2(1, 0.42), Vector2(0.42, 1)]:
+                        var sz: Vector2 = Vector2(r.size.x * sc * f.x, r.size.y * sc * f.y)
+                        if sz.x < min_dim or sz.y < min_dim or sz.x * sz.y < min_dim * min_dim * 1.05:
+                                continue
+                        var cand := Rect2(c - sz * 0.5, sz)
+                        if rect_in_polygon(cand, pts, 0.14):
+                                return cand
+        return Rect2()
+
+
+static func _cuts_around(r: Rect2, cell: Rect2, min_room := MIN_ROOM) -> Array:
         var out: Array = []
         # guillotine the room into up-to-4 strips around the cell intersection
         var ix0 := maxf(r.position.x, cell.position.x)
         var ix1 := minf(r.end.x, cell.end.x)
         var iy0 := maxf(r.position.y, cell.position.y)
         var iy1 := minf(r.end.y, cell.end.y)
-        if ix0 - r.position.x > MIN_ROOM:
+        if ix0 - r.position.x > min_room:
                 out.append(Rect2(r.position, Vector2(ix0 - r.position.x, r.size.y)))
-        if r.end.x - ix1 > MIN_ROOM:
+        if r.end.x - ix1 > min_room:
                 out.append(Rect2(Vector2(ix1, r.position.y), Vector2(r.end.x - ix1, r.size.y)))
         # middle band (y range) minus cell x-range
         var mid := Rect2(Vector2(ix0, r.position.y), Vector2(ix1 - ix0, r.size.y))
-        if iy0 - mid.position.y > MIN_ROOM:
+        if iy0 - mid.position.y > min_room:
                 out.append(Rect2(mid.position, Vector2(mid.size.x, iy0 - mid.position.y)))
-        if mid.end.y - iy1 > MIN_ROOM:
+        if mid.end.y - iy1 > min_room:
                 out.append(Rect2(Vector2(mid.position.x, iy1), Vector2(mid.size.x, mid.end.y - iy1)))
         return out
 
@@ -333,22 +389,28 @@ static func _verify_connectivity(rooms: Array, adj: Dictionary, rng: RandomNumbe
                                         frontier.append(_room_by_id(rooms, ia))
                 if connected.size() >= rooms.size():
                         return
-                # connect one stranded room
+                # connect one stranded room: punch an existing shared-wall
+                # door if possible, else grow the stair hall to reach it
+                var stranded: Room = null
                 for r in rooms:
                         if not connected.has((r as Room).id):
-                                var best_key := ""
-                                for key in adj:
-                                        var parts := (key as String).split("|")
-                                        var ia2 := int(parts[0])
-                                        var ib2 := int(parts[1])
-                                        if (ia2 == (r as Room).id and connected.has(ib2)) or (ib2 == (r as Room).id and connected.has(ia2)):
-                                                best_key = key
-                                                break
-                                if best_key != "":
-                                        var seg3: WallSeg = adj[best_key]
-                                        if seg3.door.is_empty():
-                                                seg3.door = _door_on_seg(seg3, rng)
+                                stranded = r
                                 break
+                if stranded == null:
+                        return
+                var punched := false
+                for key in adj:
+                        var seg3: WallSeg = adj[key]
+                        if seg3.door.is_empty():
+                                var parts2 := (key as String).split("|")
+                                var ia2 := int(parts2[0])
+                                var ib2 := int(parts2[1])
+                                if (ia2 == stranded.id and connected.has(ib2)) or (ib2 == stranded.id and connected.has(ia2)):
+                                        seg3.door = _door_on_seg(seg3, rng)
+                                        punched = true
+                                        break
+                if not punched:
+                        _bridge_hall(rooms, adj, rng)
 
 
 static func _room_by_id(rooms: Array, id: int) -> Room:
@@ -390,6 +452,11 @@ static func assign_kinds(rooms: Array, floor_i: int, floor_count: int, rng: Rand
                         small.append(r)
                 else:
                         large.append(r)
+        # compact floors (curved footprints, small cottages): if every room is
+        # small, promote the biggest to the "large" pool so the floor still
+        # gets a living room / kitchen instead of only storage rooms
+        if large.is_empty() and small.size() >= 2:
+                large.append(small.pop_front())
         # guarantee a bathroom on EVERY floor: if no small room exists, the
         # smallest large room becomes the bath (a large bathroom is realistic;
         # a floor without one is not)
@@ -457,3 +524,134 @@ static func room_doors(room: Room, walls: Array) -> Array:
                 var c: Vector2 = (seg.door.a + seg.door.b) * 0.5
                 out.append({"pos": c, "dir": seg.door.dir})
         return out
+
+## Grows the stair hall rect through unclaimed void, step by step, until it
+## shares a wall with a stranded room, then creates the seam wall + door.
+## Never grows into another room; if a room blocks the way, the hall doors
+## into the blocker instead (which propagates connectivity further).
+static func _bridge_hall(rooms: Array, adj: Dictionary, rng: RandomNumberGenerator) -> void:
+        var hall: Room = null
+        var stranded: Room = null
+        for r in rooms:
+                if (r as Room).kind == "stair" and hall == null:
+                        hall = r
+        var connected := _connected_set(rooms, adj)
+        for r in rooms:
+                if not connected.has((r as Room).id):
+                        stranded = r
+                        break
+        if hall == null or stranded == null:
+                return
+        var step := 0.25
+        for _i in 60:
+                var hr := hall.rect
+                var tr := stranded.rect
+                var dx: float = (tr.position.x - hr.end.x) if tr.get_center().x > hr.get_center().x else (hr.position.x - tr.end.x)
+                var dy: float = (tr.position.y - hr.end.y) if tr.get_center().y > hr.get_center().y else (hr.position.y - tr.end.y)
+                var grown: Rect2
+                if dx > dy:
+                        grown = hr.grow_individual(0.0, 0.0, -minf(step, maxf(dx, 0.0)), 0.0) if tr.get_center().x > hr.get_center().x \
+                                        else hr.grow_individual(-minf(step, maxf(dx, 0.0)), 0.0, 0.0, 0.0)
+                else:
+                        grown = hr.grow_individual(0.0, 0.0, 0.0, -minf(step, maxf(dy, 0.0))) if tr.get_center().y > hr.get_center().y \
+                                        else hr.grow_individual(0.0, -minf(step, maxf(dy, 0.0)), 0.0, 0.0)
+                # blocked by another room? door into the blocker instead
+                var blocked: Room = null
+                for other in rooms:
+                        var o := other as Room
+                        if o == hall or o == stranded:
+                                continue
+                        var inter := grown.intersection(o.rect)
+                        if inter.get_area() > 0.02:
+                                blocked = o
+                                break
+                if blocked != null:
+                        if _try_seal_door(hall, blocked, adj, rng):
+                                return
+                        continue
+                hall.rect = grown
+                if _try_seal_door(hall, stranded, adj, rng):
+                        return
+
+
+## Creates a wall segment + door on the shared seam of two rooms (if any).
+static func _try_seal_door(a: Room, b: Room, adj: Dictionary, rng: RandomNumberGenerator) -> bool:
+        var seg := _shared_wall(a.rect, b.rect)
+        if seg == null:
+                return false
+        seg.room_a = a.id
+        seg.room_b = b.id
+        seg.door = _door_on_seg(seg, rng)
+        adj["%d|%d" % [a.id, b.id]] = seg
+        return true
+
+
+## Set of room ids reachable through doors from the stair hall.
+static func _connected_set(rooms: Array, adj: Dictionary) -> Dictionary:
+        if rooms.is_empty():
+                return {}
+        var start: Room = rooms[0]
+        for r in rooms:
+                if (r as Room).kind == "stair":
+                        start = r
+                        break
+        var seen := {start.id: true}
+        var queue: Array = [start.id]
+        while queue.size() > 0:
+                var cur: int = queue.pop_front()
+                for key in adj:
+                        var seg: WallSeg = adj[key]
+                        if seg.door.is_empty():
+                                continue
+                        var ia := int((key as String).split("|")[0])
+                        var ib := int((key as String).split("|")[1])
+                        if ia == cur and not seen.has(ib):
+                                seen[ib] = true
+                                queue.append(ib)
+                        elif ib == cur and not seen.has(ia):
+                                seen[ia] = true
+                                queue.append(ia)
+        return seen
+
+## Nudges a shrink-fitted rect toward the nearest accepted room (or the stair
+## cell) until it shares a real wall seam (>= 1.0 m) with something, so no
+## room ever floats disconnected in a lobe. Returns Rect2() on failure.
+static func _nudge_to_connect(r: Rect2, rooms: Array, stair_cell: Rect2) -> Rect2:
+        var cur := r
+        for _step in 16:
+                if _has_seam(cur, rooms, stair_cell):
+                        return cur
+                # nearest target center
+                var best_d := INF
+                var best_t := Vector2.ZERO
+                var found := false
+                for other in rooms:
+                        var oc: Vector2 = (other as Room).rect.get_center()
+                        var d := cur.get_center().distance_squared_to(oc)
+                        if d < best_d:
+                                best_d = d
+                                best_t = oc
+                                found = true
+                if stair_cell.get_area() > 0.5:
+                        var cc := stair_cell.get_center()
+                        var d2 := cur.get_center().distance_squared_to(cc)
+                        if d2 < best_d:
+                                best_d = d2
+                                best_t = cc
+                                found = true
+                if not found:
+                        return Rect2()
+                var dir := (best_t - cur.get_center()).normalized()
+                cur = Rect2(cur.position + dir * 0.22, cur.size)
+        return Rect2()
+
+
+## True when the rect shares a wall seam >= 1.0 m with any accepted room or
+## the stair cell.
+static func _has_seam(r: Rect2, rooms: Array, stair_cell: Rect2) -> bool:
+        for other in rooms:
+                if _shared_wall(r, (other as Room).rect) != null:
+                        return true
+        if stair_cell.get_area() > 0.5 and _shared_wall(r, stair_cell) != null:
+                return true
+        return false

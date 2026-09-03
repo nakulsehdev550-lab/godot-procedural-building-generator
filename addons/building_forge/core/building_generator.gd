@@ -38,6 +38,9 @@ const BFMatLib := preload("res://addons/building_forge/core/materials/material_l
 var _dirty := false
 var _user_moves: Dictionary = {}    # part_id -> Transform3D (preserved across regen)
 var _generating := false
+## Debug/tooling: floor_index -> {rooms: Array[Room], walls: Array[WallSeg]}
+## from the last generation (used by the interior tour renderer + tests).
+var last_room_layout: Dictionary = {}
 
 
 func _ready() -> void:
@@ -275,6 +278,7 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                 walls = res.walls
                 BFPartitionerS.assign_kinds(rooms, floor_i, n_floors, rng,
                         p.architecture == BFParams.ArchStyle.OFFICE_TOWER)
+        last_room_layout[floor_i] = {"rooms": rooms, "walls": walls}
         var finish_top := 0.024  # room finish top; walls start here (z-fight fix)
         # interior walls + doors
         for seg in walls:
