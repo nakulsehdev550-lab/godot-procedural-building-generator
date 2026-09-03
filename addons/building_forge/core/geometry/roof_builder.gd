@@ -8,6 +8,7 @@ extends RefCounted
 
 const BFMeshUtilS := preload("res://addons/building_forge/core/geometry/mesh_util.gd")
 const BFSlabBuilderS := preload("res://addons/building_forge/core/geometry/slab_builder.gd")
+const BFWallBuilderS := preload("res://addons/building_forge/core/geometry/wall_builder.gd")
 
 enum RoofKind { FLAT, GABLE, HIP, CONE, DOME }
 
@@ -82,6 +83,7 @@ static func _deck(st: SurfaceTool, fp: BFFootprint, y: float, tile: Vector2) -> 
         var tris := Geometry2D.triangulate_polygon(fp.points)
         if tris.is_empty():
                 return
+        tris = BFSlabBuilderS.filter_degenerate(fp.points, tris)
         for t in range(0, tris.size(), 3):
                 for k in [0, 1, 2]:
                         var p: Vector2 = fp.points[tris[t + k]]
@@ -94,7 +96,9 @@ static func _build_flat(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, 
                 overhang: float, parapet_h: float, tile: Vector2) -> void:
         var outer := fp.outset(overhang)
         BFSlabBuilderS.build_slab(st, outer, base_y - 0.12, base_y + 0.05, Rect2(), tile, false)
-        var inner := fp.inset(0.12)
+        # inner ring must share vertex order with outer (offset_polygon output
+        # order is arbitrary -> use our order-preserving miter inset instead)
+        var inner := BFWallBuilderS.inner_polygon(outer, 0.12)
         _parapet_band(st, outer, inner, base_y + 0.05, base_y + 0.05 + parapet_h, 0.25, tile)
         _fascia(st_trim, outer, base_y - 0.14, base_y - 0.02, tile)
 

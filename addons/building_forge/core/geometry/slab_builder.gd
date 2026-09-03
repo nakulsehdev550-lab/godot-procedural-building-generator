@@ -19,6 +19,21 @@ static func _rect_poly(r: Rect2) -> PackedVector2Array:
                 r.position + r.size, r.position + Vector2(0, r.size.y)])
 
 
+## Removes sliver triangles that ear-clipping can emit on mitered polygons.
+static func filter_degenerate(piece: PackedVector2Array, tris: PackedInt32Array) -> PackedInt32Array:
+        var out := PackedInt32Array()
+        for t in range(0, tris.size(), 3):
+                var a := piece[tris[t]]
+                var b := piece[tris[t + 1]]
+                var c := piece[tris[t + 2]]
+                var cr := absf((b - a).cross(c - a))
+                if cr > 0.0001:
+                        out.append(tris[t])
+                        out.append(tris[t + 1])
+                        out.append(tris[t + 2])
+        return out
+
+
 static func _signed_area(poly: PackedVector2Array) -> float:
         if poly.size() < 3:
                 return 0.0

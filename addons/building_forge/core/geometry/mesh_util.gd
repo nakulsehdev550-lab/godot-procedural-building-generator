@@ -176,11 +176,14 @@ static func add_railing(st: SurfaceTool, a: Vector3, b: Vector3, base_y: float, 
 
 
 ## Finalizes a SurfaceTool into an ArrayMesh with flat normals.
+## Returns null when the tool has no geometry.
 static func commit(st: SurfaceTool, mat: Material = null) -> ArrayMesh:
         st.generate_normals()
         st.index()
         var mesh := st.commit()
-        if mat != null and mesh != null and mesh.get_surface_count() > 0:
+        if mesh == null or mesh.get_surface_count() == 0:
+                return null
+        if mat != null:
                 mesh.surface_set_material(0, mat)
         return mesh
 
