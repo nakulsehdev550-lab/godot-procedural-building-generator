@@ -1,3 +1,57 @@
 [gd_scene format=3]
 
-[node name="DemoApartment" type="Node3D" unique_id=1516391962]
+[ext_resource type="Script" path="res://addons/building_forge/core/building_generator.gd" id="1_jb2uw"]
+[ext_resource type="Script" path="res://addons/building_forge/core/footprint.gd" id="2_lbr1b"]
+[ext_resource type="Script" path="res://addons/building_forge/core/params.gd" id="3_8q8dk"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_i7bga"]
+sky_top_color = Color(0.38, 0.55, 0.78, 1)
+sky_horizon_color = Color(0.72, 0.8, 0.86, 1)
+
+[sub_resource type="Sky" id="Sky_ta04q"]
+sky_material = SubResource("ProceduralSkyMaterial_i7bga")
+
+[sub_resource type="Environment" id="Environment_ff2gb"]
+background_mode = 2
+sky = SubResource("Sky_ta04q")
+ambient_light_source = 3
+ambient_light_energy = 0.85
+tonemap_mode = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_n7cx1"]
+albedo_color = Color(0.36, 0.42, 0.33, 1)
+roughness = 0.95
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1g20e"]
+material = SubResource("StandardMaterial3D_n7cx1")
+size = Vector2(220, 220)
+
+[sub_resource type="Resource" id="Resource_naybd"]
+script = ExtResource("2_lbr1b")
+points = PackedVector2Array(-8, -6, 0.8, -6, 0.8, 0.6, 8, 0.6, 8, 6, -8, 6)
+
+[sub_resource type="Resource" id="Resource_tot1a"]
+script = ExtResource("3_8q8dk")
+footprint = SubResource("Resource_naybd")
+floors = 5
+architecture = 1
+facade_material = "brick_red"
+roof_kind = 0
+seed = 7
+
+[node name="DemoApartment" type="Node3D" unique_id=129874327]
+
+[node name="@WorldEnvironment@5" type="WorldEnvironment" parent="." unique_id=904607423]
+environment = SubResource("Environment_ff2gb")
+
+[node name="@DirectionalLight3D@6" type="DirectionalLight3D" parent="." unique_id=1224225590]
+transform = Transform3D(0.81915206, 0.4262504, -0.38379753, 0, 0.66913056, 0.74314487, 0.57357645, -0.6087487, 0.54811966, 0, 0, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="@MeshInstance3D@7" type="MeshInstance3D" parent="." unique_id=28024406]
+mesh = SubResource("PlaneMesh_1g20e")
+
+[node name="Building" type="Node3D" parent="." unique_id=49657197]
+script = ExtResource("1_jb2uw")
+params = SubResource("Resource_tot1a")

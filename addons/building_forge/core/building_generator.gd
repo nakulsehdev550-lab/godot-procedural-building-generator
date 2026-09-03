@@ -43,8 +43,9 @@ var _generating := false
 func _ready() -> void:
         if params == null:
                 params = BFParams.new()
-        if Engine.is_editor_hint() or not owner:
-                _regen()
+        # Always build on ready: in the editor (scene open) and at game runtime
+        # (instanced scenes have owner set, so owner must not gate generation).
+        _regen()
 
 
 func _notification(what: int) -> void:

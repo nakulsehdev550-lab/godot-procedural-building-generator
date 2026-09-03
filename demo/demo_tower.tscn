@@ -1,3 +1,58 @@
 [gd_scene format=3]
 
-[node name="DemoTower" type="Node3D" unique_id=676458625]
+[ext_resource type="Script" path="res://addons/building_forge/core/building_generator.gd" id="1_4jjp0"]
+[ext_resource type="Script" path="res://addons/building_forge/core/footprint.gd" id="2_7jw7d"]
+[ext_resource type="Script" path="res://addons/building_forge/core/params.gd" id="3_ovqu8"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_5so2v"]
+sky_top_color = Color(0.38, 0.55, 0.78, 1)
+sky_horizon_color = Color(0.72, 0.8, 0.86, 1)
+
+[sub_resource type="Sky" id="Sky_awlh1"]
+sky_material = SubResource("ProceduralSkyMaterial_5so2v")
+
+[sub_resource type="Environment" id="Environment_kyn11"]
+background_mode = 2
+sky = SubResource("Sky_awlh1")
+ambient_light_source = 3
+ambient_light_energy = 0.85
+tonemap_mode = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_f8lyv"]
+albedo_color = Color(0.36, 0.42, 0.33, 1)
+roughness = 0.95
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_kqdtt"]
+material = SubResource("StandardMaterial3D_f8lyv")
+size = Vector2(220, 220)
+
+[sub_resource type="Resource" id="Resource_sbwrn"]
+script = ExtResource("2_7jw7d")
+points = PackedVector2Array(8, 0, 7.846282, 1.5607226, 7.391036, 3.0614674, 6.651757, 4.444562, 5.656854, 5.656854, 4.444562, 6.651757, 3.0614674, 7.391036, 1.5607226, 7.846282, 4.8985874e-16, 8, -1.5607226, 7.846282, -3.0614674, 7.391036, -4.444562, 6.651757, -5.656854, 5.656854, -6.651757, 4.444562, -7.391036, 3.0614674, -7.846282, 1.5607226, -8, 9.797175e-16, -7.846282, -1.5607226, -7.391036, -3.0614674, -6.651757, -4.444562, -5.656854, -5.656854, -4.444562, -6.651757, -3.0614674, -7.391036, -1.5607226, -7.846282, -1.4695761e-15, -8, 1.5607226, -7.846282, 3.0614674, -7.391036, 4.444562, -6.651757, 5.656854, -5.656854, 6.651757, -4.444562, 7.391036, -3.0614674, 7.846282, -1.5607226)
+is_circular = true
+
+[sub_resource type="Resource" id="Resource_dbict"]
+script = ExtResource("3_ovqu8")
+footprint = SubResource("Resource_sbwrn")
+floors = 8
+roof_kind = 3
+window_style = 1
+stair_kind = 3
+seed = 3
+
+[node name="DemoTower" type="Node3D" unique_id=2110254243]
+
+[node name="@WorldEnvironment@11" type="WorldEnvironment" parent="." unique_id=1773914]
+environment = SubResource("Environment_kyn11")
+
+[node name="@DirectionalLight3D@12" type="DirectionalLight3D" parent="." unique_id=524258813]
+transform = Transform3D(0.81915206, 0.4262504, -0.38379753, 0, 0.66913056, 0.74314487, 0.57357645, -0.6087487, 0.54811966, 0, 0, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="@MeshInstance3D@13" type="MeshInstance3D" parent="." unique_id=1708731547]
+mesh = SubResource("PlaneMesh_kqdtt")
+
+[node name="Building" type="Node3D" parent="." unique_id=1871005122]
+script = ExtResource("1_4jjp0")
+params = SubResource("Resource_dbict")

@@ -1,3 +1,57 @@
 [gd_scene format=3]
 
-[node name="DemoVilla" type="Node3D" unique_id=731899610]
+[ext_resource type="Script" path="res://addons/building_forge/core/building_generator.gd" id="1_rsvt0"]
+[ext_resource type="Script" path="res://addons/building_forge/core/footprint.gd" id="2_narw3"]
+[ext_resource type="Script" path="res://addons/building_forge/core/params.gd" id="3_7oros"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_58na3"]
+sky_top_color = Color(0.38, 0.55, 0.78, 1)
+sky_horizon_color = Color(0.72, 0.8, 0.86, 1)
+
+[sub_resource type="Sky" id="Sky_gdhyc"]
+sky_material = SubResource("ProceduralSkyMaterial_58na3")
+
+[sub_resource type="Environment" id="Environment_e86hk"]
+background_mode = 2
+sky = SubResource("Sky_gdhyc")
+ambient_light_source = 3
+ambient_light_energy = 0.85
+tonemap_mode = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4vwkt"]
+albedo_color = Color(0.36, 0.42, 0.33, 1)
+roughness = 0.95
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_8a762"]
+material = SubResource("StandardMaterial3D_4vwkt")
+size = Vector2(220, 220)
+
+[sub_resource type="Resource" id="Resource_mpcyn"]
+script = ExtResource("2_narw3")
+points = PackedVector2Array(-7, -5.5, 0.7, -5.5, 0.7, 0.55, 7, 0.55, 7, 5.5, -7, 5.5)
+
+[sub_resource type="Resource" id="Resource_lvctv"]
+script = ExtResource("3_7oros")
+footprint = SubResource("Resource_mpcyn")
+architecture = 2
+facade_material = "facade_panel"
+roof_kind = 0
+window_style = 1
+seed = 11
+
+[node name="DemoVilla" type="Node3D" unique_id=416035606]
+
+[node name="@WorldEnvironment@8" type="WorldEnvironment" parent="." unique_id=1853504057]
+environment = SubResource("Environment_e86hk")
+
+[node name="@DirectionalLight3D@9" type="DirectionalLight3D" parent="." unique_id=2024295392]
+transform = Transform3D(0.81915206, 0.4262504, -0.38379753, 0, 0.66913056, 0.74314487, 0.57357645, -0.6087487, 0.54811966, 0, 0, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="@MeshInstance3D@10" type="MeshInstance3D" parent="." unique_id=492632409]
+mesh = SubResource("PlaneMesh_8a762")
+
+[node name="Building" type="Node3D" parent="." unique_id=877875719]
+script = ExtResource("1_rsvt0")
+params = SubResource("Resource_lvctv")

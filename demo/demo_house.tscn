@@ -1,3 +1,53 @@
 [gd_scene format=3]
 
-[node name="DemoHouse" type="Node3D" unique_id=220085929]
+[ext_resource type="Script" path="res://addons/building_forge/core/building_generator.gd" id="1_8gjyc"]
+[ext_resource type="Script" path="res://addons/building_forge/core/footprint.gd" id="2_hnr8r"]
+[ext_resource type="Script" path="res://addons/building_forge/core/params.gd" id="3_8b3em"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_qbxtb"]
+sky_top_color = Color(0.38, 0.55, 0.78, 1)
+sky_horizon_color = Color(0.72, 0.8, 0.86, 1)
+
+[sub_resource type="Sky" id="Sky_3mbqm"]
+sky_material = SubResource("ProceduralSkyMaterial_qbxtb")
+
+[sub_resource type="Environment" id="Environment_njqb1"]
+background_mode = 2
+sky = SubResource("Sky_3mbqm")
+ambient_light_source = 3
+ambient_light_energy = 0.85
+tonemap_mode = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_j8k7m"]
+albedo_color = Color(0.36, 0.42, 0.33, 1)
+roughness = 0.95
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_duxx0"]
+material = SubResource("StandardMaterial3D_j8k7m")
+size = Vector2(220, 220)
+
+[sub_resource type="Resource" id="Resource_b43bf"]
+script = ExtResource("2_hnr8r")
+points = PackedVector2Array(-5.5, -4.25, 5.5, -4.25, 5.5, 4.25, -5.5, 4.25)
+
+[sub_resource type="Resource" id="Resource_rec5o"]
+script = ExtResource("3_8b3em")
+footprint = SubResource("Resource_b43bf")
+seed = 42
+
+[node name="DemoHouse" type="Node3D" unique_id=1442540527]
+
+[node name="@WorldEnvironment@2" type="WorldEnvironment" parent="." unique_id=1217969846]
+environment = SubResource("Environment_njqb1")
+
+[node name="@DirectionalLight3D@3" type="DirectionalLight3D" parent="." unique_id=2009790942]
+transform = Transform3D(0.81915206, 0.4262504, -0.38379753, 0, 0.66913056, 0.74314487, 0.57357645, -0.6087487, 0.54811966, 0, 0, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="@MeshInstance3D@4" type="MeshInstance3D" parent="." unique_id=139542968]
+mesh = SubResource("PlaneMesh_duxx0")
+
+[node name="Building" type="Node3D" parent="." unique_id=345442772]
+script = ExtResource("1_8gjyc")
+params = SubResource("Resource_rec5o")

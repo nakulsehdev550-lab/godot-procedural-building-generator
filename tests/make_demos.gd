@@ -66,10 +66,13 @@ func _make(demo_name: String, cfg: Callable) -> void:
 	# building
 	var b := ProceduralBuilding.new()
 	b.name = "Building"
+	root_node.add_child(b)
 	var bp := BFParams.new()
 	b.params = bp
 	cfg.call(bp)
 	bp.emit_changed()
+	for child in root_node.get_children():
+		(child as Node).owner = root_node
 	var ps := PackedScene.new()
 	ps.pack(root_node)
 	var err := ResourceSaver.save(ps, "res://demo/%s.tscn" % demo_name)
