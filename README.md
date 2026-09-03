@@ -99,6 +99,32 @@ miter-inset inner edge, so corners are watertight by construction; openings
 subdivide the band and their reveals come from the piece caps. All meshes use
 Godot's clockwise front-face winding with explicit outward normals.
 
+## What changed in v1.1 (architecture overhaul)
+
+- **Every room is door-reachable** — the stairwell is a first-class room on the
+  room-adjacency graph, doors follow a penalty-aware spanning tree (bedroom to
+  bedroom doors are a last resort, like real plans), and a connectivity
+  verifier grows the hall to bridge any stranded room.
+- **Rooms open onto the facade** — windows, entrance and balcony doors open
+  into rooms (no more dead wall skin behind the glass).
+- **Real room programs** — ground floor: living + kitchen + dining; upper
+  floors: bedrooms + office/lounge variety; every floor gets a guaranteed
+  bathroom; office towers get desks, meeting and break rooms. Floor finishes
+  follow the room type (tile / carpet / wood).
+- **Stairs that always work** — polygon-aware placement with 0/90 deg
+  orientations, tread refitting for narrow footprints, correct 2 m headroom
+  slab openings, no stairs into the top ceiling, fixed spiral helix.
+- **Balconies are accessible** — the balcony door span is reserved in the
+  facade layout (no window overlaps it), glass door + railing + slab land in
+  the room behind.
+- **Z-fighting pass** — floor finishes offset from the sub-finish, slab bands
+  outset as visible floor ledges, texture mipmaps enabled (no more distant
+  moire).
+- **Sealed roofs** — ray-cast eave soffits close the overhang wedge on any
+  footprint shape; ovals get ellipsoid domes.
+- **Door frames** — proper 2-jamb + lintel frames on every interior door,
+  placed clear of wall T-junctions; furniture keeps clear of door swings.
+
 ## Testing
 
 Headless test suites (run from the project root):

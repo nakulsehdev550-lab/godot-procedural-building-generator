@@ -39,3 +39,18 @@ Work Log:
   R8 EAVE SOFFIT missing on gable/hip/cone -> see-through under overhang from below.
   R9 PROPS ignore doors -> furniture can block doorways.
 - Plan: shaft becomes a real Room (kind stair) so spanning tree doors reach it; rooms touch facade (boundary walls only face true interior voids); robust stair placement with rotation+grid+fit; layout_floor reserves balcony span; kind program (living/kitchen/dining/bath/office per floor); z-fight offsets; soffits; door-aware prop layout; free() instead of queue_free.
+
+---
+Task ID: 10
+Agent: main
+Task: v1.1 QA gauntlet — agent-rated visual tours, root-cause fixes, release
+
+Work Log:
+- Ran 3 agent review rounds + own verification on every critical claim (agents caught real bugs; several "missing" items were camera-angle artifacts — verified by re-rendering face-on)
+- FIXED (critical): interior door frame basis confusion — jambs offset ACROSS the wall (floating columns in every doorway since v1.0) + top bar at mid-height; spiral steps orbited cell corner instead of pole; regenerate pile-up (queue_free + same-frame add_child name collision)
+- FIXED (arch): stairwell as first-class room; rooms touch facade; room-kind program per floor w/ guaranteed bath; door T-junction avoidance; short-seam walls + sub-span coverage pass (no open holes between misaligned rooms); hall-bridge safety net
+- FIXED (visual): mipmaps enabled (facade moire), ray-cast soffits to real roof extent, ellipsoid domes, slab band outset, circular facade even windows, no balconies on circles
+- Test suites: geo_smoke ALL + e2e 28/28 + connectivity 76/76 (new suite)
+- Zoo: 12 buildings x (4 exterior + every-room interior tours) = 335 renders; reviewed by agents each round
+Stage Summary:
+- v1.1.0 ready. Release: plugin zip WITHOUT baked textures (unchanged from v1.0.0 per user request)
