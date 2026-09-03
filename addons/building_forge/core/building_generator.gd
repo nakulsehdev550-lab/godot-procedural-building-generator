@@ -76,10 +76,18 @@ func _regen() -> void:
 func generate() -> void:
         var t0 := Time.get_ticks_usec()
         _collect_user_moves()
-        # wipe old generation
+        # wipe old generation. Must be an IMMEDIATE free: queue_free() defers to
+        # end of frame, so the new "Generated" child would collide with the
+        # dying one and get renamed (@Generated@2) - the next regeneration
+        # would then never find "Generated" again and buildings pile up.
         var old := get_node_or_null("Generated")
         if old != null:
-                old.queue_free()
+                remove_child(old)
+                old.free()
+        var old_col := get_node_or_null("Collision")
+        if old_col != null:
+                remove_child(old_col)
+                old_col.free()
         var root := Node3D.new()
         root.name = "Generated"
         add_child(root)
@@ -95,54 +103,19 @@ func generate() -> void:
         var fh := params.floor_height
         var n_floors := params.floors
         var t := params.wall_thickness
-        var rotation := deg_to_rad(params.rotation_degrees_y)
 
-        # stair planning (same cell all floors)
-        var stair_kind := _resolve_stair_kind(fp, n_floors)
-        var plan_d := BFStairBuilderS.plan(stair_kind, fh, rng)
         var inner := BFWallBuilderS.inner_polygon(fp.points, t)
         var inner_fp := BFFootprint.create(inner)
         var interior_bounds := _rect_of(inner_fp)
-        var stair_kind_final: int = plan_d.kind
-        if stair_kind_final == BFStairBuilderS.StairKind.SPIRAL:
-                var cell := Rect2(fp.center_xz() - plan_d.cell.size * 0.5, plan_d.cell.size)
-                plan_d["placed_cell"] = cell
-        else:
-                var cell := BFStairBuilderS.place_cell(plan_d.cell, interior_bounds, rng)
-                if not BFPartitionerS.rect_in_polygon(cell, inner, 0.2):
-                        # bbox corner landed in a notch: try candidates inside the polygon
-                        var found := false
-                        var c := inner_fp.center_xz()
-                        var candidates: Array = [
-                                Rect2(c - plan_d.cell.size * 0.5, plan_d.cell.size),
-                                Rect2(Vector2(interior_bounds.position.x + 0.4, interior_bounds.position.y + 0.4), plan_d.cell.size),
-                                Rect2(Vector2(interior_bounds.end.x - plan_d.cell.size.x - 0.4, interior_bounds.position.y + 0.4), plan_d.cell.size),
-                                Rect2(Vector2(interior_bounds.position.x + 0.4, interior_bounds.end.y - plan_d.cell.size.y - 0.4), plan_d.cell.size),
-                                Rect2(Vector2(interior_bounds.end.x - plan_d.cell.size.x - 0.4, interior_bounds.end.y - plan_d.cell.size.y - 0.4), plan_d.cell.size),
-                        ]
-                        for cand in candidates:
-                                if BFPartitionerS.rect_in_polygon(cand, inner, 0.2):
-                                        cell = cand
-                                        found = true
-                                        break
-                        if not found:
-                                # shrink toward center until it fits
-                                for shrink in [0.8, 0.6, 0.45, 0.3]:
-                                        var sz: Vector2 = plan_d.cell.size * shrink
-                                        var cand2 := Rect2(c - sz * 0.5, sz)
-                                        if BFPartitionerS.rect_in_polygon(cand2, inner, 0.12):
-                                                cell = cand2
-                                                plan_d["hole"] = Rect2(plan_d.hole.position * shrink, plan_d.hole.size * shrink)
-                                                found = true
-                                                break
-                        if not found:
-                                print("[BuildingForge] no valid stairwell spot; skipping stairs")
-                plan_d["placed_cell"] = cell
-        var stair_cell: Rect2 = plan_d.placed_cell
-        var stair_hole: Rect2 = Rect2(
-                stair_cell.position + (plan_d.hole.position),
-                plan_d.hole.size) if stair_kind_final != BFStairBuilderS.StairKind.SPIRAL \
-                else Rect2(stair_cell.get_center() - plan_d.hole.size * 0.5, plan_d.hole.size)
+
+        # stair planning: polygon-aware, tries kind preferences, orientations
+        # and refits - same shaft on every floor; may legitimately fail on
+        # tiny footprints (then no stairs and NO slab hole are built)
+        var stair := _plan_stairs(fp, inner, interior_bounds, fh, rng)
+        var plan_d: Dictionary = stair.get("plan", {})
+        var stair_cell: Rect2 = stair.get("cell", Rect2())
+        var stair_flip: bool = stair.get("flip", false)
+        var stair_hole: Rect2 = stair.get("hole", Rect2())
 
         var tri_count := 0
         for i in n_floors:
@@ -159,16 +132,35 @@ func generate() -> void:
                         m3d = MeshInstance3D.new()
                         m3d.name = "Shell"
                         floor_node.add_child(m3d)
-                var open := BFFacadeS.layout_floor(fp, base, wall_h, params, rng)
-                tri_count += _build_exterior(floor_node, surfaces, fp, wall_base, wall_h2, wall_h, t, open, rng)
+                # balcony plan for this floor: edge + reserved door span so the
+                # facade layout never punches a window over the balcony door
+                var balcony_edge := -1
+                var balcony_u := Vector2.ZERO
+                var has_balcony := false
+                if params.balconies and (i > 0 or params.ground_balcony) and i % params.balcony_every_n_floors == 0:
+                        has_balcony = true
+                if has_balcony:
+                        balcony_edge = fp.longest_edge()
+                        var elen := fp.edge_length(balcony_edge)
+                        var bw := minf(3.2, elen * 0.5)
+                        var door_w := minf(1.0, bw)
+                        balcony_u = Vector2(elen * 0.5 - door_w * 0.5, elen * 0.5 + door_w * 0.5)
+                var open := BFFacadeS.layout_floor(fp, base, wall_h, params, rng, balcony_edge, balcony_u)
+                tri_count += _build_exterior(floor_node, surfaces, fp, wall_base, wall_h2, wall_h, t, open, rng,
+                        balcony_edge, balcony_u, has_balcony)
                 if params.generate_interior:
-                        tri_count += _build_interior(floor_node, surfaces, fp, inner_fp, base, fh, wall_h, t, stair_cell, stair_hole, plan_d, i, rng)
+                        tri_count += _build_interior(floor_node, surfaces, fp, inner_fp, base, fh, wall_h, t,
+                                stair_cell, stair_hole, plan_d, stair_flip, i, n_floors, rng)
                 # slab above this floor (ceiling / next floor base)
                 var slab_st := surfaces_for(surfaces, "concrete", style_dir)
-                BFSlabBuilderS.build_slab(slab_st, fp.points, base + fh - 0.301, base + fh, Rect2(), Vector2(0.5, 0.5), false, [stair_hole] if i < n_floors - 1 else [])
-                # floor finish on ground
-                if i == 0:
-                        BFSlabBuilderS.build_slab(surfaces_for(surfaces, "wood_floor", style_dir), inner, base + 0.001, base + 0.021, Rect2(), Vector2(0.5, 0.5), true)
+                var slab_holes: Array = []
+                if plan_d.size() > 0 and i < n_floors - 1:
+                        slab_holes.append(stair_hole)
+                BFSlabBuilderS.build_slab(slab_st, fp.points, base + fh - 0.301, base + fh, Rect2(), Vector2(0.5, 0.5), false, slab_holes)
+                # thin sub-finish under interior walls; room finishes sit above
+                # it (different Y) so nothing is coplanar (z-fighting fix)
+                if i == 0 and params.generate_interior:
+                        BFSlabBuilderS.build_slab(surfaces_for(surfaces, "wood_floor", style_dir), inner, base + 0.001, base + 0.011, Rect2(), Vector2(0.5, 0.5), true)
                 _commit_surfaces(surfaces, floor_node, m3d, style_dir, "f%02d" % i)
                 tri_count += 0
         # roof
@@ -191,7 +183,8 @@ func surfaces_for(surfaces: Dictionary, mat_id: String, _style: String) -> Surfa
 
 
 func _build_exterior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, base: float,
-        build_h: float, logic_h: float, t: float, openings: Dictionary, rng: RandomNumberGenerator) -> int:
+        build_h: float, logic_h: float, t: float, openings: Dictionary, rng: RandomNumberGenerator,
+        balcony_edge := -1, balcony_u := Vector2.ZERO, has_balcony := false) -> int:
         var p := params
         var style := p.texture_style_dir
         var st_wall := surfaces_for(surfaces, p.facade_material, style)
@@ -213,22 +206,22 @@ func _build_exterior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                         var od: Dictionary = o
                         if od.kind == "door":
                                 BFFacadeS.build_door(st_trim, st_door, a, d, od.u1, od.u2, od.v2, base, t, Vector2(0.5, 0.5))
+                        elif od.kind == "balcony_door":
+                                pass  # punched by the wall builder; dressed by _build_balcony
                         else:
                                 BFFacadeS.build_window(st_trim, st_glass, a, d, od.u1, od.u2, od.v1, od.v2, base, t, p, Vector2(0.5, 0.5))
                                 if curtain:
                                         BFFacadeS.build_mullions(st_trim, a, d, od.u1, od.u2, od.v1, od.v2, base, 1.35)
-        # balconies
-        if p.balconies:
-                var floor_idx := int(round(base / p.floor_height))
-                if floor_idx > 0 or p.ground_balcony:
-                        if floor_idx % p.balcony_every_n_floors == 0:
-                                _build_balcony(floor_node, st_concrete, st_trim, st_glass, fp, base, t, rng)
+        # balcony (door span already reserved in the facade layout)
+        if has_balcony:
+                _build_balcony(floor_node, st_concrete, st_trim, st_glass, fp, base, t, rng, balcony_edge, balcony_u)
         return 0
 
 
 func _build_balcony(floor_node: Node3D, st_conc: SurfaceTool, st_trim: SurfaceTool,
-                st_glass: SurfaceTool, fp: BFFootprint, base: float, t: float, rng: RandomNumberGenerator) -> void:
-        var e := fp.longest_edge()
+                st_glass: SurfaceTool, fp: BFFootprint, base: float, t: float, rng: RandomNumberGenerator,
+                balcony_edge := -1, balcony_u := Vector2.ZERO) -> void:
+        var e := balcony_edge if balcony_edge >= 0 else fp.longest_edge()
         var edge := fp.edge(e)
         var a: Vector2 = edge[0]
         var b: Vector2 = edge[1]
@@ -251,9 +244,9 @@ func _build_balcony(floor_node: Node3D, st_conc: SurfaceTool, st_trim: SurfaceTo
         BFMeshUtilS.add_railing(st_trim, front_a, front_b, y, 1.02, 0.05)
         BFMeshUtilS.add_railing(st_trim, Vector3(c.x, y, c.y) + d3(d) * (-bw * 0.5), front_a, y, 1.02, 0.05)
         BFMeshUtilS.add_railing(st_trim, Vector3(c.x, y, c.y) + d3(d) * bw * 0.5, front_b, y, 1.02, 0.05)
-        # balcony door (glass) behind balcony
-        var door_w := 1.0
-        var du1 := u1 + bw * 0.5 - door_w * 0.5
+        # balcony door (glass) - uses the span reserved in the facade layout
+        var door_w := (balcony_u.y - balcony_u.x) if balcony_u.y > balcony_u.x else minf(1.0, bw)
+        var du1 := balcony_u.x if balcony_u.y > balcony_u.x else u1 + bw * 0.5 - door_w * 0.5
         BFFacadeS.build_door(st_trim, st_glass, a, d, du1, du1 + door_w, params.door_height, base, t, Vector2(0.5, 0.5), true)
 
 
@@ -263,26 +256,26 @@ func d3(v: Vector2) -> Vector3:
 
 func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, inner_fp: BFFootprint,
                 base: float, fh: float, wall_h: float, t: float, stair_cell: Rect2, stair_hole: Rect2,
-                plan_d: Dictionary, floor_i: int, rng: RandomNumberGenerator) -> int:
+                plan_d: Dictionary, stair_flip: bool, floor_i: int, n_floors: int, rng: RandomNumberGenerator) -> int:
         var p := params
         var style := p.texture_style_dir
         var st_int := surfaces_for(surfaces, p.interior_material, style)
         var st_trim := surfaces_for(surfaces, "trim_white", style)
         var st_wood := surfaces_for(surfaces, "wood_dark", style)
         var st_conc := surfaces_for(surfaces, "concrete", style)
-        # partition rooms
-        var bounds := _rect_of(inner_fp).grow(-0.1)
-        if bounds.get_area() < 6.0:
-                return 0
-        var res := BFPartitionerS.partition(bounds, inner_fp.points, stair_cell, p.max_room_area, rng)
-        var rooms: Array = res.rooms
-        var walls: Array = res.walls
-        # mark stair room
-        for r in rooms:
-                if (r as BFPartitionerS.Room).rect.grow(0.05).intersects(stair_cell):
-                        (r as BFPartitionerS.Room).kind = "stair"
-                        break
-        BFPartitionerS.assign_kinds(rooms, floor_i, rng, true)
+        # partition rooms. NO pre-shrink: rooms extend to the inner face of the
+        # exterior walls so windows / balcony doors open into rooms, and the
+        # stairwell is a first-class room that doors always reach.
+        var bounds := _rect_of(inner_fp).grow(-0.02)
+        var rooms: Array = []
+        var walls: Array = []
+        if bounds.get_area() >= 4.0:
+                var res := BFPartitionerS.partition(bounds, inner_fp.points, stair_cell, p.max_room_area, rng)
+                rooms = res.rooms
+                walls = res.walls
+                BFPartitionerS.assign_kinds(rooms, floor_i, n_floors, rng,
+                        p.architecture == BFParams.ArchStyle.OFFICE_TOWER)
+        var finish_top := 0.024  # room finish top; walls start here (z-fight fix)
         # interior walls + doors
         for seg in walls:
                 var s := seg as BFPartitionerS.WallSeg
@@ -294,8 +287,8 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                 var mid := (s.a + s.b) * 0.5
                 var basis := Basis(Vector3(d.x, 0, d.y), Vector3.UP, Vector3(-d.y, 0, d.x))
                 if s.door.is_empty():
-                        var xf := Transform3D(basis, Vector3(mid.x, base + wall_h * 0.5 + 0.01, mid.y))
-                        BFMeshUtilS.add_box(st_int, xf, Vector3(l, wall_h + 0.02, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
+                        var xf := Transform3D(basis, Vector3(mid.x, base + finish_top + wall_h * 0.5, mid.y))
+                        BFMeshUtilS.add_box(st_int, xf, Vector3(l, wall_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
                 else:
                         var da: Vector2 = s.door.a
                         var db: Vector2 = s.door.b
@@ -304,15 +297,15 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                         var dh: float = minf(2.08, wall_h - 0.15)
                         if dl > 0.05:
                                 var m1 := (s.a + da) * 0.5
-                                BFMeshUtilS.add_box(st_int, Transform3D(basis, Vector3(m1.x, base + wall_h * 0.5, m1.y)), Vector3(dl, wall_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
+                                BFMeshUtilS.add_box(st_int, Transform3D(basis, Vector3(m1.x, base + finish_top + wall_h * 0.5, m1.y)), Vector3(dl, wall_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
                         if dr > 0.05:
                                 var m2 := (db + s.b) * 0.5
-                                BFMeshUtilS.add_box(st_int, Transform3D(basis, Vector3(m2.x, base + wall_h * 0.5, m2.y)), Vector3(dr, wall_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
+                                BFMeshUtilS.add_box(st_int, Transform3D(basis, Vector3(m2.x, base + finish_top + wall_h * 0.5, m2.y)), Vector3(dr, wall_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
                         # above-door lintel piece
                         var mc := (da + db) * 0.5
                         var lintel_h := wall_h - dh
                         if lintel_h > 0.05:
-                                BFMeshUtilS.add_box(st_int, Transform3D(basis, Vector3(mc.x, base + dh + lintel_h * 0.5, mc.y)), Vector3(da.distance_to(db), lintel_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
+                                BFMeshUtilS.add_box(st_int, Transform3D(basis, Vector3(mc.x, base + finish_top + dh + lintel_h * 0.5, mc.y)), Vector3(da.distance_to(db), lintel_h, BFPartitionerS.INT_WALL_T), Vector2(0.5, 0.5))
                         # door frame + panel (closed, centered)
                         var dw := da.distance_to(db)
                         var bdoor := Basis(Vector3(-d.y, 0, d.x), Vector3.UP, Vector3(d.x, 0, d.y))
@@ -332,26 +325,112 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                 if rect.get_area() < 1.0:
                         continue
                 match room.kind:
-                        "bath", "kitchen":
-                                BFSlabBuilderS.build_floor_finish(st_fin_tile, rect, base + 0.021)
+                        "bath", "kitchen", "storage":
+                                BFSlabBuilderS.build_floor_finish(st_fin_tile, rect, base + finish_top)
                         "bedroom":
-                                BFSlabBuilderS.build_floor_finish(st_fin_carpet, rect, base + 0.021)
+                                BFSlabBuilderS.build_floor_finish(st_fin_carpet, rect, base + finish_top)
                         _:
-                                BFSlabBuilderS.build_floor_finish(st_fin_wood, rect, base + 0.021)
+                                BFSlabBuilderS.build_floor_finish(st_fin_wood, rect, base + finish_top)
                 if p.generate_props:
-                        var placements := BFPropsS.layout_room(room.kind, rect, [], base, rng)
+                        var doors := BFPartitionerS.room_doors(room, walls)
+                        var placements := BFPropsS.layout_room(room.kind, rect, doors, base + finish_top, rng)
                         var pi := 0
                         for pl in placements:
                                 _build_prop(floor_node, prop_sts, pl, floor_i, room.id, base, style, pi)
                                 pi += 1
-        # stairs to next floor
-        var stair_node := Node3D.new()
-        stair_node.name = "Stairs"
-        floor_node.add_child(stair_node)
-        var st_stair := surfaces_for(surfaces, "concrete", style)
-        var st_wood2 := surfaces_for(surfaces, "wood_dark", style)
-        var stair_info := BFStairBuilderS.build(st_stair, st_wood2, plan_d, stair_cell, fh, base, rng)
+        # stairs to next floor: only when a fit was planned and this is not the
+        # top floor (stairs into a solid ceiling are a classic generator bug)
+        if plan_d.size() > 0 and floor_i < n_floors - 1:
+                var stair_node := Node3D.new()
+                stair_node.name = "Stairs"
+                floor_node.add_child(stair_node)
+                var st_stair := surfaces_for(surfaces, "concrete", style)
+                var st_wood2 := surfaces_for(surfaces, "wood_dark", style)
+                BFStairBuilderS.build(st_stair, st_wood2, plan_d, stair_cell, fh, base, rng, Vector2(0.5, 0.5), stair_flip)
         return 0
+
+
+## Polygon-aware stair planning: tries the preferred kind first, then
+## fallbacks; each kind is tried un-rotated and 90deg-rotated over a grid of
+## positions inside the interior polygon; refits (compresses treads / spiral
+## radius) before giving up. Returns {plan, cell, flip, hole} or {}.
+func _plan_stairs(fp: BFFootprint, inner: PackedVector2Array, interior_bounds: Rect2, fh: float, rng: RandomNumberGenerator) -> Dictionary:
+        var order: Array = []
+        match params.stair_kind:
+                BFParams.Stair.STRAIGHT:
+                        order = [BFStairBuilderS.StairKind.STRAIGHT]
+                BFParams.Stair.DOGLEG:
+                        order = [BFStairBuilderS.StairKind.DOGLEG]
+                BFParams.Stair.SPIRAL:
+                        order = [BFStairBuilderS.StairKind.SPIRAL]
+                _:
+                        var pref := _resolve_stair_kind(fp, params.floors)
+                        if pref == BFStairBuilderS.StairKind.SPIRAL:
+                                order = [BFStairBuilderS.StairKind.SPIRAL, BFStairBuilderS.StairKind.DOGLEG, BFStairBuilderS.StairKind.STRAIGHT]
+                        elif pref == BFStairBuilderS.StairKind.STRAIGHT:
+                                order = [BFStairBuilderS.StairKind.STRAIGHT, BFStairBuilderS.StairKind.DOGLEG, BFStairBuilderS.StairKind.SPIRAL]
+                        else:
+                                order = [BFStairBuilderS.StairKind.DOGLEG, BFStairBuilderS.StairKind.STRAIGHT, BFStairBuilderS.StairKind.SPIRAL]
+        for kind in order:
+                var plan_d := BFStairBuilderS.plan(kind, fh, rng)
+                var fit := _fit_stair(plan_d, inner, interior_bounds)
+                if not fit.is_empty():
+                        return fit
+        print("[BuildingForge] footprint too small for any staircase; building will have no stairs")
+        return {}
+
+
+func _fit_stair(plan_d: Dictionary, inner: PackedVector2Array, interior_bounds: Rect2) -> Dictionary:
+        var cell0: Rect2 = plan_d.cell
+        var scales := [1.0, 0.9, 0.8, 0.7]
+        for sc in scales:
+                var pd := plan_d
+                if sc < 1.0:
+                        pd = BFStairBuilderS.refit(plan_d, cell0.size * sc)
+                        if pd.is_empty():
+                                continue
+                for flip in [false, true]:
+                        var sz: Vector2 = Vector2(pd.cell.size.y, pd.cell.size.x) if flip else pd.cell.size
+                        var world_cell := _stair_search_cell(sz, inner, interior_bounds)
+                        if world_cell.get_area() > 0.0:
+                                var hole := BFStairBuilderS.hole_world(pd, world_cell, flip)
+                                return {"plan": pd, "cell": world_cell, "flip": flip, "hole": hole}
+        return {}
+
+
+## Deterministic position search: corners -> center -> edge midpoints ->
+## grid. Returns the first rect that fits the polygon (with clearance),
+## else Rect2().
+func _stair_search_cell(sz: Vector2, inner: PackedVector2Array, bounds: Rect2) -> Rect2:
+        var pad := 0.3
+        var c := bounds.get_center()
+        var candidates: Array = [
+                Vector2(bounds.position.x + pad, bounds.position.y + pad),
+                Vector2(bounds.end.x - sz.x - pad, bounds.position.y + pad),
+                Vector2(bounds.position.x + pad, bounds.end.y - sz.y - pad),
+                Vector2(bounds.end.x - sz.x - pad, bounds.end.y - sz.y - pad),
+                c - sz * 0.5,
+                Vector2(c.x - sz.x * 0.5, bounds.position.y + pad),
+                Vector2(c.x - sz.x * 0.5, bounds.end.y - sz.y - pad),
+                Vector2(bounds.position.x + pad, c.y - sz.y * 0.5),
+                Vector2(bounds.end.x - sz.x - pad, c.y - sz.y * 0.5),
+        ]
+        var gx := maxi(1, int((bounds.size.x - sz.x - 2.0 * pad) / 0.7))
+        var gy := maxi(1, int((bounds.size.y - sz.y - 2.0 * pad) / 0.7))
+        for iy in gy + 1:
+                for ix in gx + 1:
+                        candidates.append(Vector2(
+                                bounds.position.x + pad + minf(ix * 0.7, bounds.size.x - sz.x - 2.0 * pad),
+                                bounds.position.y + pad + minf(iy * 0.7, bounds.size.y - sz.y - 2.0 * pad)))
+        for pos in candidates:
+                var r := Rect2(pos, sz)
+                if r.position.x < bounds.position.x - 0.01 or r.position.y < bounds.position.y - 0.01:
+                        continue
+                if r.end.x > bounds.end.x + 0.01 or r.end.y > bounds.end.y + 0.01:
+                        continue
+                if BFPartitionerS.rect_in_polygon(r, inner, 0.18):
+                        return r
+        return Rect2()
 
 
 func _prop_sts(surfaces: Dictionary, style: String) -> Dictionary:
@@ -421,10 +500,11 @@ func _build_roof(roof_node: Node3D, fp: BFFootprint, base: float, rng: RandomNum
         if kind == BFParams.Roof.FLAT and p.roof_railing:
                 var outer := fp.outset(0.05)
                 var n := outer.size()
+                var rail_base := base + 0.05  # deck top (was floating 0.55 m above it)
                 for i in n:
                         var a: Vector2 = outer[i]
                         var b: Vector2 = outer[(i + 1) % n]
-                        BFMeshUtilS.add_railing(st_metal, Vector3(a.x, base + 0.6, a.y), Vector3(b.x, base + 0.6, b.y), base + 0.6, 0.5, 0.04)
+                        BFMeshUtilS.add_railing(st_metal, Vector3(a.x, rail_base, a.y), Vector3(b.x, rail_base, b.y), rail_base, 0.5, 0.04)
         _commit_mesh(roof_node, st_roof, BFMatLib.get_material(_roof_mat(), style), "Roof_Surface")
         _commit_mesh(roof_node, st_trim, BFMatLib.get_material("trim_white", style), "Roof_Trim")
         _commit_mesh(roof_node, st_conc, BFMatLib.get_material("concrete", style), "Roof_Concrete")

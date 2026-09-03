@@ -21,3 +21,21 @@ Stage Summary:
 - Repo PUBLIC: https://github.com/nakulsehdev550-lab/godot-procedural-building-generator
 - Release: https://github.com/nakulsehdev550-lab/godot-procedural-building-generator/releases/tag/v1.0.0
 - All tests green post-restore; project considered shipped. User should revoke the PAT token now that public access is configured.
+
+---
+Task ID: 9
+Agent: main
+Task: v1.1 overhaul — fix architecture bugs reported by user (stairs, room kinds, doors, balconies, z-fighting, regenerate)
+
+Work Log:
+- Read all core sources (3734 LOC). Root causes identified:
+  R1 REGENERATE: generate() queue_free's old "Generated" then adds new same-name child in same frame -> Godot renames new node to @Generated@N -> next regen never finds "Generated" -> buildings pile up. Same for "Collision" node.
+  R2 SEALED STAIRS: partition() carves the stair cell out of candidates; boundary walls face the shaft and never get doors -> stairwell unreachable. Spanning tree only connects regular rooms.
+  R3 SEALED FACADE: bounds pre-shrunk (grow(-0.1)/grow(-0.05)) -> rooms sit 0.15 m inside facade; _edge_facing_void adds boundary walls along facade edges -> windows/balcony/entrance doors open into dead 0.15 m gaps.
+  R4 ALL BEDROOMS: assign_kinds() final loop converts "living"->"bedroom"; upper floors never get kitchen; floors w/o small rooms get no bath.
+  R5 BALCONY OVERLAP: layout_floor doesn't reserve balcony door span -> window punched at same spot as balcony door -> double frames, z-fight, blocked opening.
+  R6 Z-FIGHT: floor-0 global finish and room finishes at identical y=0.021; flat-roof railing floats 0.55 m above deck (base_y=base+0.6 instead of deck top).
+  R7 STAIR PLACEMENT: narrow/irregular footprints fail rect_in_polygon -> "skipping stairs" but stairs still built at bad centered cell; no rotation candidates; stairs also built on TOP floor into solid ceiling; straight-stair slab hole starts too far up run (headroom<2.05 mid-flight).
+  R8 EAVE SOFFIT missing on gable/hip/cone -> see-through under overhang from below.
+  R9 PROPS ignore doors -> furniture can block doorways.
+- Plan: shaft becomes a real Room (kind stair) so spanning tree doors reach it; rooms touch facade (boundary walls only face true interior voids); robust stair placement with rotation+grid+fit; layout_floor reserves balcony span; kind program (living/kitchen/dining/bath/office per floor); z-fight offsets; soffits; door-aware prop layout; free() instead of queue_free.

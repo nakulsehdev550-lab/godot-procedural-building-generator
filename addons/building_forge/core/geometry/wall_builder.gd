@@ -54,6 +54,38 @@ static func inner_polygon(outer: PackedVector2Array, thickness: float) -> Packed
         return inner
 
 
+## Computes the outward-mitered outer polygon (same vertex count/order as
+## input). Used for eave soffits: the result edges pair 1:1 with the input.
+static func outer_polygon(outer: PackedVector2Array, thickness: float) -> PackedVector2Array:
+        var n := outer.size()
+        var out := PackedVector2Array()
+        out.resize(n)
+        if n < 3:
+                return out
+        for i in n:
+                var v := outer[i]
+                var prev := outer[(i - 1 + n) % n]
+                var next := outer[(i + 1) % n]
+                var d0 := (v - prev).normalized()
+                var d1 := (next - v).normalized()
+                var n0 := Vector2(d0.y, -d0.x)  # outward normals (CCW polygon)
+                var n1 := Vector2(d1.y, -d1.x)
+                var cr := d0.cross(d1)
+                if absf(cr) < 0.08:
+                        # near-parallel edges (tessellated circles): simple offset
+                        out[i] = v + n0 * thickness
+                        continue
+                var rhs := (n1 - n0) * thickness
+                var s := rhs.cross(d1) / cr
+                var q := v + n0 * thickness + d0 * s
+                var ml := (q - v).length()
+                var max_ml := thickness * MITER_CLAMP
+                if ml > max_ml:
+                        q = v + (q - v).normalized() * max_ml
+                out[i] = q
+        return out
+
+
 ## Builds all wall pieces for one floor onto the SurfaceTool.
 ## openings: Dictionary  edge_index -> Array of Dictionaries {u1,u2,v1,v2}
 ##           (u along edge from A in meters, v from wall base in meters).

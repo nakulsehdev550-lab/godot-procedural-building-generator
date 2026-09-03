@@ -13,13 +13,18 @@ const BFWallBuilderS := preload("res://addons/building_forge/core/geometry/wall_
 
 
 ## Computes all exterior openings for one floor.
+## balcony_edge / balcony_u: when a balcony is built on this floor, the door
+## span on that edge is reserved here (no window overlaps it; the wall gets a
+## full-height "balcony_door" opening that _build_balcony dresses later).
 ## Returns Dictionary { edge_index: Array[Dictionary] }
 ## each: {u1,u2,v1,v2, kind:"window"/"door"/"balcony_door", edge:int}
-static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFParams, rng: RandomNumberGenerator) -> Dictionary:
+static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFParams, rng: RandomNumberGenerator,
+                balcony_edge := -1, balcony_u := Vector2.ZERO) -> Dictionary:
         var openings := {}
         var entrance_edge := _pick_entrance_edge(fp)
         var skip_entrance := not _has_entrance(fp, base_y)
         for e in fp.edge_count():
+                var is_balcony_edge := e == balcony_edge and balcony_u.y > balcony_u.x
                 var list: Array = []
                 var elen := fp.edge_length(e)
                 # circular footprints: tessellated edges are short -> one window per
@@ -34,11 +39,15 @@ static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFPar
                         var v2c := minf(p.window_sill + p.window_height, wall_h - 0.18)
                         if v2c - v1c < 0.4:
                                 continue
-                        list.append({"u1": (elen - ww) * 0.5, "u2": (elen + ww) * 0.5, "v1": v1c, "v2": v2c, "kind": "window"})
-                        if e == entrance_edge and not skip_entrance:
+                        if is_balcony_edge:
                                 list.clear()
-                                var dw2 := p.door_width
-                                list.append({"u1": elen * 0.5 - dw2 * 0.5, "u2": elen * 0.5 + dw2 * 0.5, "v1": 0.0, "v2": p.door_height, "kind": "door"})
+                                list.append({"u1": balcony_u.x, "u2": balcony_u.y, "v1": 0.0, "v2": p.door_height, "kind": "balcony_door"})
+                        else:
+                                list.append({"u1": (elen - ww) * 0.5, "u2": (elen + ww) * 0.5, "v1": v1c, "v2": v2c, "kind": "window"})
+                                if e == entrance_edge and not skip_entrance:
+                                        list.clear()
+                                        var dw2 := p.door_width
+                                        list.append({"u1": elen * 0.5 - dw2 * 0.5, "u2": elen * 0.5 + dw2 * 0.5, "v1": 0.0, "v2": p.door_height, "kind": "door"})
                         openings[e] = list
                         continue
                 match p.window_style:
@@ -48,6 +57,14 @@ static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFPar
                                 list = _layout_tall(elen, wall_h, p)
                         _:
                                 list = _layout_punched(elen, wall_h, p, rng)
+                if is_balcony_edge:
+                        # drop windows overlapping the balcony door span, reserve the door
+                        var kept: Array = []
+                        for o in list:
+                                if float(o.u2) < balcony_u.x - 0.12 or float(o.u1) > balcony_u.y + 0.12:
+                                        kept.append(o)
+                        list = kept
+                        list.append({"u1": balcony_u.x, "u2": balcony_u.y, "v1": 0.0, "v2": p.door_height, "kind": "balcony_door", "edge": e})
                 if e == entrance_edge and not skip_entrance:
                         var dw := p.door_width
                         var u0 := elen * 0.5 - dw * 0.5
