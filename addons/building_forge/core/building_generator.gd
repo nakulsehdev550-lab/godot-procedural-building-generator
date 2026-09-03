@@ -622,7 +622,7 @@ func finalize() -> Node3D:
         parent.add_child(standalone)
         parent.move_child(standalone, idx)
         for child in gen.get_children():
-                (child as Node).reparent(standalone)
+                (child as Node).reparent(standalone, is_inside_tree())
         # bake generator transform into children
         for c in standalone.find_children("*", "MeshInstance3D", true, false):
                 (c as MeshInstance3D).transform = standalone.transform.affine_inverse() * (c as MeshInstance3D).transform
