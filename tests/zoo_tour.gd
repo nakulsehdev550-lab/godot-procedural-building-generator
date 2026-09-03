@@ -20,9 +20,11 @@ func _initialize() -> void:
                 var entry: Dictionary = zoo[i]
                 var data := await _tour_building(entry, i)
                 manifest.append(data)
-        var f := FileAccess.open(OUT + "/manifest.json", FileAccess.WRITE)
-        f.store_string(JSON.stringify(manifest, "  "))
-        f.close()
+                # rewrite manifest after every building so partial runs survive
+                var fw := FileAccess.open(OUT + "/manifest.json", FileAccess.WRITE)
+                if fw != null:
+                        fw.store_string(JSON.stringify(manifest, "  "))
+                        fw.close()
         print("ZOO DONE: %d buildings" % zoo.size())
         quit(0)
 
@@ -195,7 +197,7 @@ func _tour_building(entry: Dictionary, idx: int) -> Dictionary:
                 var a := TAU * float(i) / 6.0
                 cam.position = Vector3(cos(a) * radius, ext_h, sin(a) * radius)
                 cam.look_at(Vector3(0, ext_h * 0.35, 0))
-                for f in 6:
+                for f in 3:
                         await process_frame
                 root.get_texture().get_image().save_png("%s/ext_%02d.png" % [bdir, i])
         print("  %s: exterior done" % tag)
@@ -237,7 +239,7 @@ func _tour_building(entry: Dictionary, idx: int) -> Dictionary:
                         cam.position = eye
                         cam.look_at(target)
                         fill.light_energy = 0.9  # interior fill light
-                        for f in 6:
+                        for f in 3:
                                 await process_frame
                         root.get_texture().get_image().save_png("%s/f%02d_%s_%02d.png" % [bdir, fi, k, shots])
                         shots += 1

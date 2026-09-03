@@ -326,12 +326,14 @@ static func layout_room(kind: String, rect: Rect2, door_dirs: Array, base_y: flo
                         out.append({"id": "plant", "pos": _v3(rect.end.x - 0.4, base_y, rect.position.y + 0.4), "rot_y": 0.0})
                 "bath":
                         out.append({"id": "toilet", "pos": _v3(rect.position.x + 0.35, base_y, rect.position.y + 0.5), "rot_y": 0.0})
-                        out.append({"id": "washbasin", "pos": _v3(rect.end.x - 0.4, base_y, rect.position.y + 0.4), "rot_y": 0.0})
+                        if rect.size.x > 1.9:
+                                out.append({"id": "washbasin", "pos": _v3(rect.end.x - 0.4, base_y, rect.position.y + 0.4), "rot_y": 0.0})
                         if rect.get_area() > 5.5:
                                 out.append({"id": "bathtub", "pos": _v3(c.x, base_y, rect.end.y - 0.5), "rot_y": 0.0})
-                        else:
+                        elif rect.size.x > 1.3 and rect.size.y > 1.3:
                                 out.append({"id": "shower", "pos": _v3(c.x, base_y, rect.end.y - 0.55), "rot_y": 0.0})
-                        out.append({"id": "washing_machine", "pos": _v3(rect.position.x + 0.4, base_y, rect.end.y - 0.45), "rot_y": 0.0})
+                        if rect.get_area() > 4.5:
+                                out.append({"id": "washing_machine", "pos": _v3(rect.position.x + 0.4, base_y, rect.end.y - 0.45), "rot_y": 0.0})
                 "office":
                         out.append({"id": "desk_pc", "pos": _v3(c.x, base_y, rect.position.y + 0.45), "rot_y": 0.0})
                         out.append({"id": "chair", "pos": _v3(c.x, base_y, rect.position.y + 1.05), "rot_y": PI})

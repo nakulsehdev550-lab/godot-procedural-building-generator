@@ -140,7 +140,7 @@ func generate() -> void:
                 var balcony_edge := -1
                 var balcony_u := Vector2.ZERO
                 var has_balcony := false
-                if params.balconies and (i > 0 or params.ground_balcony) and i % params.balcony_every_n_floors == 0:
+                if params.balconies and not fp.is_circular and (i > 0 or params.ground_balcony) and i % params.balcony_every_n_floors == 0:
                         has_balcony = true
                 if has_balcony:
                         balcony_edge = fp.longest_edge()

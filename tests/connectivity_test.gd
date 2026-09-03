@@ -198,8 +198,8 @@ func test_building(cfg: int) -> void:
                         if cfg % 6 == 5:
                                 check(kinds.has("office"), label + ": office tower has offices (kinds=%s)" % str(kinds))
 
-        # --- balcony door span reserved in facade layout
-        if p.balconies and p.floors > 1:
+        # --- balcony door span reserved in facade layout (not for circles)
+        if p.balconies and p.floors > 1 and not p.footprint.is_circular:
                 var rng2 := RandomNumberGenerator.new()
                 rng2.seed = p.seed
                 var open := BFFacadeS.layout_floor(fp, p.floor_height, p.floor_height - 0.3, p, rng2, fp.longest_edge(), Vector2(3.0, 4.0))

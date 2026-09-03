@@ -121,12 +121,15 @@ static func partition(bounds: Rect2, interior_pts: PackedVector2Array, stair_cel
                 for j in range(i + 1, rooms.size()):
                         var ra: Room = rooms[i]
                         var rb: Room = rooms[j]
-                        var seg := _shared_wall(ra.rect, rb.rect)
+                        # short seams still get a wall so rooms never visually
+                        # merge; only seams >= 1.2 m become door candidates
+                        var seg := _shared_wall(ra.rect, rb.rect, 0.4)
                         if seg != null:
                                 seg.room_a = ra.id
                                 seg.room_b = rb.id
-                                adj["%d|%d" % [ra.id, rb.id]] = seg
                                 walls.append(seg)
+                                if _shared_wall(ra.rect, rb.rect, 1.2) != null:
+                                        adj["%d|%d" % [ra.id, rb.id]] = seg
         # boundary walls: only where the edge faces an INTERIOR void (stair shaft
         # remainder / unpartitioned sliver). Edges along the facade are sealed by
         # the exterior band itself and must stay open to it.
@@ -138,8 +141,12 @@ static func partition(bounds: Rect2, interior_pts: PackedVector2Array, stair_cel
                                 walls.append(seg2)
         # doors: spanning tree from the stair hall -> every room reachable
         if rooms.size() > 0:
-                _place_doors(rooms, adj, stair_cell, rng)
-                _verify_connectivity(rooms, adj, rng)
+                var avoid: Array = []
+                for w in walls:
+                        avoid.append((w as WallSeg).a)
+                        avoid.append((w as WallSeg).b)
+                _place_doors(rooms, adj, stair_cell, rng, avoid)
+                _verify_connectivity(rooms, adj, rng, avoid)
         return {"rooms": rooms, "walls": walls, "interior": bounds}
 
 
@@ -218,14 +225,14 @@ static func _cuts_around(r: Rect2, cell: Rect2, min_room := MIN_ROOM) -> Array:
         return out
 
 
-## If rects share an edge overlap >= 1.2 m, returns a WallSeg on the seam.
-static func _shared_wall(ra: Rect2, rb: Rect2) -> WallSeg:
+## If rects share an edge overlap >= min_len, returns a WallSeg on the seam.
+static func _shared_wall(ra: Rect2, rb: Rect2, min_len := 1.2) -> WallSeg:
         # vertical seam?
         if absf(ra.end.x - rb.position.x) < 0.02 or absf(rb.end.x - ra.position.x) < 0.02:
                 var x := ra.end.x if absf(ra.end.x - rb.position.x) < 0.02 else rb.end.x
                 var y0 := maxf(ra.position.y, rb.position.y)
                 var y1 := minf(ra.end.y, rb.end.y)
-                if y1 - y0 >= 1.2:
+                if y1 - y0 >= min_len:
                         var s := WallSeg.new()
                         s.a = Vector2(x, y0)
                         s.b = Vector2(x, y1)
@@ -234,7 +241,7 @@ static func _shared_wall(ra: Rect2, rb: Rect2) -> WallSeg:
                 var y := ra.end.y if absf(ra.end.y - rb.position.y) < 0.02 else rb.end.y
                 var x0 := maxf(ra.position.x, rb.position.x)
                 var x1 := minf(ra.end.x, rb.end.x)
-                if x1 - x0 >= 1.2:
+                if x1 - x0 >= min_len:
                         var s := WallSeg.new()
                         s.a = Vector2(x0, y)
                         s.b = Vector2(x1, y)
@@ -305,7 +312,7 @@ static func _door_penalty(a: Room, b: Room) -> int:
         return 2
 
 
-static func _place_doors(rooms: Array, adj: Dictionary, stair_cell: Rect2, rng: RandomNumberGenerator) -> void:
+static func _place_doors(rooms: Array, adj: Dictionary, stair_cell: Rect2, rng: RandomNumberGenerator, avoid: Array = []) -> void:
         if rooms.is_empty():
                 return
         # BFS spanning tree starting from a stair room (falls back to the room
@@ -357,12 +364,12 @@ static func _place_doors(rooms: Array, adj: Dictionary, stair_cell: Rect2, rng: 
                         var ra := _room_by_id(rooms, int((key2 as String).split("|")[0]))
                         var rb := _room_by_id(rooms, int((key2 as String).split("|")[1]))
                         if ra != null and rb != null and _door_penalty(ra, rb) <= 2:
-                                seg2.door = _door_on_seg(seg2, rng)
+                                seg2.door = _door_on_seg(seg2, rng, avoid)
 
 
 ## Safety net: if any room ended up unreachable, punch a door on a shared
 ## wall to a connected room until the graph is fully connected.
-static func _verify_connectivity(rooms: Array, adj: Dictionary, rng: RandomNumberGenerator) -> void:
+static func _verify_connectivity(rooms: Array, adj: Dictionary, rng: RandomNumberGenerator, avoid: Array = []) -> void:
         if rooms.is_empty():
                 return
         var start: Room = rooms[0]
@@ -406,11 +413,11 @@ static func _verify_connectivity(rooms: Array, adj: Dictionary, rng: RandomNumbe
                                 var ia2 := int(parts2[0])
                                 var ib2 := int(parts2[1])
                                 if (ia2 == stranded.id and connected.has(ib2)) or (ib2 == stranded.id and connected.has(ia2)):
-                                        seg3.door = _door_on_seg(seg3, rng)
+                                        seg3.door = _door_on_seg(seg3, rng, avoid)
                                         punched = true
                                         break
                 if not punched:
-                        _bridge_hall(rooms, adj, rng)
+                        _bridge_hall(rooms, adj, rng, avoid)
 
 
 static func _room_by_id(rooms: Array, id: int) -> Room:
@@ -420,14 +427,36 @@ static func _room_by_id(rooms: Array, id: int) -> Room:
         return null
 
 
-static func _door_on_seg(seg: WallSeg, rng: RandomNumberGenerator) -> Dictionary:
+static func _door_on_seg(seg: WallSeg, rng: RandomNumberGenerator, avoid := []) -> Dictionary:
         var d := seg.b - seg.a
         var len_m := d.length()
+        var dn := d.normalized()
         var dw := 0.92
-        var t := rng.randf_range(0.3, 0.7)
-        var c := seg.a + d * t
+        # keep clear of T-junction endpoints (perpendicular walls landing on
+        # this seam) - a wall end inside a doorway looks like a sealed door
+        var obs: Array = []
+        for o in avoid:
+                var pt: Vector2 = o
+                var rel := pt - seg.a
+                var along := rel.dot(dn)
+                var perp := absf(rel.cross(dn))
+                if perp < 0.08 and along > 0.2 and along < len_m - 0.2:
+                        obs.append(clampf(along, dw * 0.5 + 0.35, len_m - dw * 0.5 - 0.35))
+        var best_t := rng.randf_range(0.3, 0.7)
+        if obs.size() > 0:
+                var best_score := -1.0
+                for k in 14:
+                        var tk := 0.3 + 0.4 * float(k) / 13.0
+                        var u := tk * len_m
+                        var score := INF
+                        for ou in obs:
+                                score = minf(score, absf(u - ou))
+                        if score > best_score:
+                                best_score = score
+                                best_t = tk
+        var c := seg.a + d * best_t
         var dir := Vector2(d.y, -d.x).normalized()  # perpendicular = passage direction
-        return {"a": c - d.normalized() * dw * 0.5, "b": c + d.normalized() * dw * 0.5, "dir": dir, "w": dw}
+        return {"a": c - dn * dw * 0.5, "b": c + dn * dw * 0.5, "dir": dir, "w": dw}
 
 
 ## Assigns room kinds for one floor using a realistic program:
@@ -529,7 +558,7 @@ static func room_doors(room: Room, walls: Array) -> Array:
 ## shares a wall with a stranded room, then creates the seam wall + door.
 ## Never grows into another room; if a room blocks the way, the hall doors
 ## into the blocker instead (which propagates connectivity further).
-static func _bridge_hall(rooms: Array, adj: Dictionary, rng: RandomNumberGenerator) -> void:
+static func _bridge_hall(rooms: Array, adj: Dictionary, rng: RandomNumberGenerator, avoid: Array = []) -> void:
         var hall: Room = null
         var stranded: Room = null
         for r in rooms:
@@ -566,22 +595,22 @@ static func _bridge_hall(rooms: Array, adj: Dictionary, rng: RandomNumberGenerat
                                 blocked = o
                                 break
                 if blocked != null:
-                        if _try_seal_door(hall, blocked, adj, rng):
+                        if _try_seal_door(hall, blocked, adj, rng, avoid):
                                 return
                         continue
                 hall.rect = grown
-                if _try_seal_door(hall, stranded, adj, rng):
+                if _try_seal_door(hall, stranded, adj, rng, avoid):
                         return
 
 
 ## Creates a wall segment + door on the shared seam of two rooms (if any).
-static func _try_seal_door(a: Room, b: Room, adj: Dictionary, rng: RandomNumberGenerator) -> bool:
+static func _try_seal_door(a: Room, b: Room, adj: Dictionary, rng: RandomNumberGenerator, avoid: Array = []) -> bool:
         var seg := _shared_wall(a.rect, b.rect)
         if seg == null:
                 return false
         seg.room_a = a.id
         seg.room_b = b.id
-        seg.door = _door_on_seg(seg, rng)
+        seg.door = _door_on_seg(seg, rng, avoid)
         adj["%d|%d" % [a.id, b.id]] = seg
         return true
 

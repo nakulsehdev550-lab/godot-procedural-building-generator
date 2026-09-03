@@ -30,25 +30,25 @@ static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFPar
                 # circular footprints: tessellated edges are short -> one window per
                 # edge, sized to the edge (curtain style falls back to punched)
                 if fp.is_circular:
-                        if elen < 1.0:
-                                continue
-                        var ww := minf(p.window_width, elen - 0.55)
-                        if ww < 0.5:
-                                continue
+                        # tessellated edges vary in length -> use a FIXED window
+                        # size at even arc spacing so the band reads consistent
+                        var ww := minf(p.window_width, 1.6)
                         var v1c := p.window_sill
                         var v2c := minf(p.window_sill + p.window_height, wall_h - 0.18)
-                        if v2c - v1c < 0.4:
-                                continue
+                        if v2c - v1c >= 0.4 and elen >= ww + 0.7:
+                                var spacing := maxf(ww + 1.1, 2.2)
+                                var n_c := maxi(1, int(round(elen / spacing)))
+                                for k in n_c:
+                                        var cu := elen * (float(k) + 0.5) / float(n_c)
+                                        list.append({"u1": cu - ww * 0.5, "u2": cu + ww * 0.5, "v1": v1c, "v2": v2c, "kind": "window"})
                         if is_balcony_edge:
+                                pass  # no balconies on circular footprints
+                        elif e == entrance_edge and not skip_entrance:
                                 list.clear()
-                                list.append({"u1": balcony_u.x, "u2": balcony_u.y, "v1": 0.0, "v2": p.door_height, "kind": "balcony_door"})
-                        else:
-                                list.append({"u1": (elen - ww) * 0.5, "u2": (elen + ww) * 0.5, "v1": v1c, "v2": v2c, "kind": "window"})
-                                if e == entrance_edge and not skip_entrance:
-                                        list.clear()
-                                        var dw2 := p.door_width
-                                        list.append({"u1": elen * 0.5 - dw2 * 0.5, "u2": elen * 0.5 + dw2 * 0.5, "v1": 0.0, "v2": p.door_height, "kind": "door"})
-                        openings[e] = list
+                                var dw2 := p.door_width
+                                list.append({"u1": elen * 0.5 - dw2 * 0.5, "u2": elen * 0.5 + dw2 * 0.5, "v1": 0.0, "v2": p.door_height, "kind": "door"})
+                        if not list.is_empty():
+                                openings[e] = list
                         continue
                 match p.window_style:
                         BFParams.WindowStyle.CURTAIN:
