@@ -1,0 +1,18 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="BuildingForge - Procedural Building Generator"
+config/description="Demo project for BuildingForge: fully procedural 3D building generator plugin for Godot 4.x"
+config/features=PackedStringArray("4.7")
+config/icon="res://addons/building_forge/ui/icons/icon.svg"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/building_forge/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
