@@ -54,3 +54,15 @@ Work Log:
 - Zoo: 12 buildings x (4 exterior + every-room interior tours) = 335 renders; reviewed by agents each round
 Stage Summary:
 - v1.1.0 ready. Release: plugin zip WITHOUT baked textures (unchanged from v1.0.0 per user request)
+
+---
+Task ID: 11
+Agent: main
+Task: Release v1.1.0
+
+Work Log:
+- Release created: https://github.com/nakulsehdev550-lab/godot-procedural-building-generator/releases/tag/v1.1.0
+- Assets: building_forge_plugin_v1.1.0.zip (77.6KB, code-only) + building_forge_full_project_v1.1.0.zip (115.6KB) — baked textures EXCLUDED per user request (unchanged from v1.0.0; noted in release body)
+- All work pushed incrementally; final renders in renders/zoo/
+Stage Summary:
+- v1.1.0 shipped. Todo: user should revoke the PAT token when done.
