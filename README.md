@@ -17,8 +17,9 @@ can be moved, rotated or deleted by hand afterwards.
 - **Any scale** — 1 to 50 floors, from cottages to towers, real-world meters.
 - **Facade styles** — Classic (punched windows, frames, sills), Modern (glass
   curtain walls with mullions), Tall windows, Brick apartment, Office tower.
-- **Roofs** — Gable, Hip, Cone (round buildings), Dome, Flat (parapet + railing
-  + rooftop equipment).
+- **Roofs** — Gable, Hip, Mansard, Gambrel (barn), Shed, Cone (round
+  buildings), Dome, Flat (parapet + railing + rooftop equipment) — each with
+  pitch + secondary-pitch controls and a draggable roof-pitch handle.
 - **Full interiors** — BSP room partitioning that always respects the footprint,
   interior walls with door openings, per-room floor finishes (wood / tile /
   carpet), staircases (straight, dogleg, spiral) with slab openings and rails.
@@ -33,6 +34,24 @@ can be moved, rotated or deleted by hand afterwards.
   regular node. Move anything; regenerating keeps your changes (matched by
   part id). A "finalize" option converts the whole building to a plain editable
   scene.
+- **Interactive editing suite** (see below) — draggable corner / roof / bend
+  point handles, right-click wall editing, live regeneration while you drag.
+- **Per-floor overrides** — every floor can have its own facade material,
+  window style, balcony switch and footprint outset (overhang or setback):
+  build "shop base + apartments + penthouse setback" in one building.
+- **Custom openings & entrance** — cut your own windows/doors anywhere on any
+  wall (right-click) and move the entrance to any facade.
+- **Paint** — facade and roof tint colors multiply over the textures; repaint
+  at runtime in the zoo map.
+- **Facade detail** — stone plinth + cornice bands, brick chimneys, site pad,
+  picket fence with a gate at the entrance.
+- **House-type interiors** — furniture theming per architecture: village
+  houses get fireplaces, offices get lobbies with reception desks, modern
+  villas get armchair corners.
+- **Custom model slots** — swap ANY generated prop (sofa, bed, fridge...), the
+  window assembly or the door assembly with your own PackedScene (glTF, FBX,
+  anything Godot imports). Instances are placed at generation time and baked
+  into the scene — nothing is generated at game runtime.
 - **Performance options** — per-part nodes for maximum editability or one merged
   mesh per floor; optional trimesh collision; 12-floor tower generates in
   ~0.3 s.
@@ -56,6 +75,57 @@ can be moved, rotated or deleted by hand afterwards.
    drag the top handle to change the floor count.
 5. Move any generated part by hand — your edits are kept when the building
    regenerates.
+
+## Interactive editing (v1.2)
+
+Select a building and use the viewport handles — the whole building
+(interiors, windows, stairs) regenerates live while you drag:
+
+- **Wall corner handles** (bottom) and **roof corner handles** (at the roof
+  line) — drag any corner to reshape the footprint. Every wall, window, room
+  and stair follows.
+- **Edge midpoint handles** — drag one OUTWARD to insert a new bend point in
+  a wall (works on any facade, any angle).
+- **Roof pitch handle** (at the ridge) — drag up/down to change the roof
+  pitch. Cone roofs get an apex handle.
+- **Height handle** — drag vertically to add/remove whole floors.
+- **Right-click any wall** for the context menu: *Add Bend Point Here*,
+  *Delete Nearest Corner*, **Cut Window in Wall** / **Cut Door in Wall** (cut
+  at the exact clicked position and floor — openings follow their wall when
+  you edit the footprint later), *Remove Openings Here*, *Set Entrance Here*,
+  *Clear All Custom Openings*, *Finalize (Bake Static)*.
+- **Move any part by hand** — walls, props, roofs, even meshes inside your
+  custom scenes: manual transforms survive regeneration.
+- While a handle drag is active the generator runs in fast mode (no
+  props/collision) and does a full rebuild on release, so dragging stays
+  fluid even on towers.
+
+## Custom models (props / windows / doors)
+
+1. Import your model as a PackedScene (e.g. drag a `.glb` into the project,
+   or save a scene of your own).
+2. Select the building ▸ Inspector ▸ **Custom Models**:
+   - `Prop Scenes` — dictionary: key = prop id (`bed_double`, `sofa`,
+     `fridge`, `toilet`, ...), value = your scene. The generated boxes for
+     that prop are skipped and your scene is instanced instead (position =
+     the prop spot, facing into the room).
+   - `Window Scene` / `Door Scene` — replaces EVERY generated window/door
+     assembly. Author the model with its origin at the **center of the
+     opening, +Z facing outdoors**; it is auto-placed into every opening.
+3. Everything is instanced during generation (editor-time) and saved into the
+   scene — at game runtime it is plain geometry, nothing is procedural.
+
+## The walkable zoo map
+
+`demo/zoo_map.tscn` — 16 buildings covering the settings matrix on a plaza
+with a first-person player:
+
+- **WASD** move, **Shift** sprint, **Space** jump, mouse look (click to
+  capture, **ESC** to release).
+- Aim at any building: **E** cycle facade material, **R** cycle roof style,
+  **G** cycle facade paint, **F** flashlight.
+- Walk inside every building — collision is generated for walls, floors,
+  stairs and props.
 
 ## Inspector parameters (overview)
 
