@@ -6,7 +6,7 @@ extends SceneTree
 ##   xvfb-run godot --path . --rendering-driver opengl3 --script res://tests/zoo_tour.gd
 
 const OUT := "/home/z/my-project/building-generator/renders/zoo"
-const MAX_ROOM_SHOTS_PER_FLOOR := 10
+const MAX_ROOM_SHOTS_PER_FLOOR := 7
 const BFPartitionerS := preload("res://addons/building_forge/core/interior/room_partitioner.gd")
 
 
