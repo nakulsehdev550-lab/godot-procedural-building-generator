@@ -25,14 +25,13 @@ func _initialize() -> void:
 
 	var b := ProceduralBuilding.new()
 	root.add_child(b)
-	b.params.footprint = BFFootprint.create_rect(14, 11)
-	b.params.floors = 3
-	b.params.architecture = BFParams.ArchStyle.BRICK_APARTMENT
-	b.params.apply_architecture_defaults()
-	b.params.balconies = true
-	b.params.stair_kind = BFParams.Stair.DOGLEG
-	b.params.max_room_area = 18.0
-	b.params.seed = 31
+	b.params.footprint = BFFootprint.create_oval(13, 9)
+	b.params.floors = 2
+	b.params.architecture = BFParams.ArchStyle.MODERN
+	b.params.roof_kind = BFParams.Roof.DOME
+	b.params.window_style = BFParams.WindowStyle.CURTAIN
+	b.params.stair_kind = BFParams.Stair.SPIRAL
+	b.params.seed = 15
 	b.generate()
 	await process_frame
 

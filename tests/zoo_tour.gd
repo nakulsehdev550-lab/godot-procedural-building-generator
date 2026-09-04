@@ -121,13 +121,16 @@ func _tour_building(entry: Dictionary, idx: int) -> Dictionary:
                         if shots >= MAX_ROOM_SHOTS_PER_FLOOR:
                                 continue
                         var rect: Rect2 = room.rect
-                        var eye := Vector3(rect.get_center().x, base + 1.55, rect.get_center().y)
+                        # stair rooms: eye ABOVE the flight (center eye ends up
+                        # inside the steps / shaft walls)
+                        var eye_y: float = base + (2.5 if k == "stair" else 1.55)
+                        var eye := Vector3(rect.get_center().x, eye_y, rect.get_center().y)
                         # look toward the room's first door (shows connectivity), else diagonal
                         var doors := BFPartitionerS.room_doors(room, walls)
                         var target: Vector3
                         if doors.size() > 0:
                                 var dp: Vector2 = doors[0].pos
-                                target = Vector3(dp.x, base + 1.3, dp.y)
+                                target = Vector3(dp.x, eye_y - 0.25, dp.y)
                         else:
                                 target = Vector3(rect.position.x, base + 1.2, rect.end.y)
                         if eye.distance_to(target) < 0.5:

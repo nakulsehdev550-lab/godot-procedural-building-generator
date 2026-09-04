@@ -24,7 +24,7 @@
         "shots": 5
       }
     ],
-    "stats": "floors=2  tris=7_630  parts=61  23.7 ms"
+    "stats": "floors=2  tris=7_630  parts=61  24.0 ms"
   },
   {
     "floors": 1,
@@ -42,7 +42,7 @@
         "shots": 5
       }
     ],
-    "stats": "floors=1  tris=3_892  parts=30  12.1 ms"
+    "stats": "floors=1  tris=3_892  parts=30  13.6 ms"
   },
   {
     "floors": 1,
@@ -58,7 +58,7 @@
         "shots": 3
       }
     ],
-    "stats": "floors=1  tris=3_460  parts=27  27.5 ms"
+    "stats": "floors=1  tris=3_460  parts=27  27.4 ms"
   },
   {
     "floors": 2,
@@ -87,7 +87,7 @@
         "shots": 6
       }
     ],
-    "stats": "floors=2  tris=11_284  parts=77  34.2 ms"
+    "stats": "floors=2  tris=11_284  parts=77  34.9 ms"
   },
   {
     "floors": 3,
@@ -129,7 +129,7 @@
         "shots": 7
       }
     ],
-    "stats": "floors=3  tris=30_098  parts=208  93.5 ms"
+    "stats": "floors=3  tris=30_098  parts=208  95.2 ms"
   },
   {
     "floors": 5,
@@ -189,7 +189,7 @@
         "shots": 7
       }
     ],
-    "stats": "floors=5  tris=47_640  parts=345  151.5 ms"
+    "stats": "floors=5  tris=47_640  parts=345  148.6 ms"
   },
   {
     "floors": 3,
@@ -223,7 +223,7 @@
         "shots": 3
       }
     ],
-    "stats": "floors=3  tris=9_692  parts=62  69.2 ms"
+    "stats": "floors=3  tris=9_692  parts=62  50.6 ms"
   },
   {
     "floors": 5,
@@ -282,7 +282,7 @@
         "shots": 7
       }
     ],
-    "stats": "floors=5  tris=31_110  parts=223  94.3 ms"
+    "stats": "floors=5  tris=31_110  parts=223  92.0 ms"
   },
   {
     "floors": 6,
@@ -357,7 +357,7 @@
         "shots": 7
       }
     ],
-    "stats": "floors=6  tris=82_194  parts=375  296.6 ms"
+    "stats": "floors=6  tris=82_194  parts=375  291.9 ms"
   },
   {
     "floors": 8,
@@ -400,7 +400,7 @@
         "shots": 7
       }
     ],
-    "stats": "floors=8  tris=97_994  parts=516  299.7 ms"
+    "stats": "floors=8  tris=97_994  parts=516  330.6 ms"
   },
   {
     "floors": 10,
@@ -440,7 +440,7 @@
         "shots": 7
       }
     ],
-    "stats": "floors=10  tris=96_982  parts=557  430.9 ms"
+    "stats": "floors=10  tris=96_982  parts=557  295.7 ms"
   },
   {
     "floors": 2,
@@ -468,7 +468,7 @@
         "shots": 5
       }
     ],
-    "stats": "floors=2  tris=10_290  parts=66  30.2 ms"
+    "stats": "floors=2  tris=10_290  parts=66  31.2 ms"
   },
   {
     "floors": 2,
@@ -489,7 +489,7 @@
         "shots": 1
       }
     ],
-    "stats": "floors=2  tris=7_935  parts=16  20.0 ms"
+    "stats": "floors=2  tris=7_935  parts=16  26.2 ms"
   },
   {
     "floors": 3,
@@ -528,7 +528,7 @@
         "shots": 7
       }
     ],
-    "stats": "floors=3  tris=19_716  parts=139  60.9 ms"
+    "stats": "floors=3  tris=19_716  parts=139  60.2 ms"
   },
   {
     "floors": 10,
@@ -568,7 +568,7 @@
         "shots": 7
       }
     ],
-    "stats": "floors=10  tris=67_866  parts=551  219.9 ms"
+    "stats": "floors=10  tris=67_866  parts=551  218.7 ms"
   },
   {
     "floors": 2,
@@ -597,6 +597,6 @@
         "shots": 7
       }
     ],
-    "stats": "floors=2  tris=10_416  parts=66  32.3 ms"
+    "stats": "floors=2  tris=10_416  parts=66  32.0 ms"
   }
 ]

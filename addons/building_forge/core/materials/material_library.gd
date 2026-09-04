@@ -74,7 +74,9 @@ static func _build(id: String, style_dir: String) -> StandardMaterial3D:
                 if ResourceLoader.exists(normal_path):
                         mat.normal_enabled = true
                         mat.normal_texture = load(normal_path)
-                        mat.normal_scale = 0.9
+                        # strong-grain props (wood) streak badly at glancing
+                        # angles - keep architecture surfaces strong, props soft
+                        mat.normal_scale = 0.45 if id in ["wood_dark", "wood_light", "fabric_sofa", "fabric_bed"] else 0.9
                 if ResourceLoader.exists(rough_path):
                         mat.roughness_texture = load(rough_path)
                         mat.roughness = 1.0
