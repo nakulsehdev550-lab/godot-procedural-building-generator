@@ -85,12 +85,17 @@ static func create_circle(radius: float, center := Vector2.ZERO, segments := 0) 
 
 
 static func create_oval(w: float, d: float, segments := 0) -> BFFootprint:
-        var n := segments if segments > 0 else maxi(24, int(maxf(w, d) * 4.0))
+        # segment count from PERIMETER (~1.4 m chords) so windows still fit on
+        # each tessellated edge - 4 pts/m made oval edges too short to punch
+        var a := w * 0.5
+        var b := d * 0.5
+        var perimeter := TAU * sqrt((a * a + b * b) * 0.5)
+        var n := segments if segments > 0 else maxi(24, int(perimeter / 1.4))
         var pts := PackedVector2Array()
         pts.resize(n)
         for i in n:
-                var a := TAU * float(i) / float(n)
-                pts[i] = Vector2(cos(a) * w * 0.5, sin(a) * d * 0.5)
+                var ang := TAU * float(i) / float(n)
+                pts[i] = Vector2(cos(ang) * a, sin(ang) * b)
         var f := create(pts)
         f.is_circular = true
         return f

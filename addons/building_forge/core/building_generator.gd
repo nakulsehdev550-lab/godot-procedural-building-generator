@@ -700,7 +700,9 @@ func _resolve_mat(mat_id: String, style: String, tint := Color.WHITE) -> Materia
         return BFMatLib.get_tinted(mat_id, style, tint)
 
 
-## Brick chimney stack near the ridge/roof top (OBB-aligned).
+## Brick chimney stack - placed where it ALWAYS intersects the roof: on the
+## ridge for symmetric roofs, near the high edge for sheds. Top extends 0.6 m
+## past the roof underside at its own position (height field).
 func _build_chimney(st_conc: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, base: float, kind: int) -> void:
         var obb := BFRoofBuilderS.oriented_bbox(fp.points)
         var center: Vector2 = obb[0]
@@ -711,25 +713,17 @@ func _build_chimney(st_conc: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint,
         var xfrm := Transform3D(Basis(Vector3(ca, 0, -sa), Vector3.UP, Vector3(sa, 0, ca)), Vector3(center.x, 0, center.y))
         var hz: float = half.y
         var pitch := params.roof_pitch
-        var top_h := base
-        match kind:
-                BFParams.Roof.GABLE, BFParams.Roof.HIP:
-                        top_h = base + hz * pitch
-                BFParams.Roof.MANSARD:
-                        var s := minf(half.x, hz) * 0.38
-                        top_h = base + s * params.roof_pitch2 + (hz - s) * pitch
-                BFParams.Roof.GAMBREL:
-                        var kz := hz * 0.45
-                        top_h = base + (hz - kz) * params.roof_pitch2 + kz * pitch
-                BFParams.Roof.SHED:
-                        top_h = base + 2.0 * hz * pitch * 0.7
-                _:
-                        top_h = base + 1.0
-        var lx := half.x * 0.55
-        var lz := -hz * 0.25
+        var pitch2 := params.roof_pitch2
+        var lx := 0.0
+        var lz := 0.0
+        if kind == BFParams.Roof.SHED:
+                lx = half.x * 0.15
+                lz = -hz * 0.55
+        var roof_h := BFRoofBuilderS.pitched_height(kind, half.x, hz, pitch, pitch2, lx, lz)
+        var top_h := base + maxf(roof_h, 0.3) + 0.6
         var wpos := xfrm * Vector3(lx, 0, lz)
-        BFMeshUtilS.add_box(st_conc, Transform3D(Basis.IDENTITY, Vector3(wpos.x, (base - 0.1 + top_h + 0.7) * 0.5, wpos.z)), Vector3(0.55, top_h - base + 0.8, 0.55), Vector2(0.5, 0.5))
-        BFMeshUtilS.add_box(st_trim, Transform3D(Basis.IDENTITY, Vector3(wpos.x, top_h + 0.72, wpos.z)), Vector3(0.72, 0.1, 0.72), Vector2(0.5, 0.5))
+        BFMeshUtilS.add_box(st_conc, Transform3D(Basis.IDENTITY, Vector3(wpos.x, (base - 0.1 + top_h) * 0.5, wpos.z)), Vector3(0.55, top_h - base + 0.7, 0.55), Vector2(0.5, 0.5))
+        BFMeshUtilS.add_box(st_trim, Transform3D(Basis.IDENTITY, Vector3(wpos.x, top_h + 0.06, wpos.z)), Vector3(0.72, 0.1, 0.72), Vector2(0.5, 0.5))
 
 
 ## Site items: concrete pad under the building + picket fence around the plot
@@ -756,11 +750,11 @@ func _build_site(site: Node3D, fp: BFFootprint) -> void:
                                 var u0 := elen * 0.5 - gw * 0.5
                                 var u1 := elen * 0.5 + gw * 0.5
                                 if u0 > 0.3:
-                                        BFMeshUtilS.add_railing(st_fence, Vector3(a.x, 0, a.y), Vector3(a.x + dir.x * u0, 0, a.y + dir.y * u0), 0.08, 1.05, 0.05)
+                                        BFMeshUtilS.add_railing(st_fence, Vector3(a.x, 0.0, a.y), Vector3(a.x + dir.x * u0, 0.0, a.y + dir.y * u0), 0.0, 1.05, 0.05)
                                 if elen - u1 > 0.3:
-                                        BFMeshUtilS.add_railing(st_fence, Vector3(a.x + dir.x * u1, 0, a.y + dir.y * u1), Vector3(b.x, 0, b.y), 0.08, 1.05, 0.05)
+                                        BFMeshUtilS.add_railing(st_fence, Vector3(a.x + dir.x * u1, 0.0, a.y + dir.y * u1), Vector3(b.x, 0.0, b.y), 0.0, 1.05, 0.05)
                         else:
-                                BFMeshUtilS.add_railing(st_fence, Vector3(a.x, 0, a.y), Vector3(b.x, 0, b.y), 0.08, 1.05, 0.05)
+                                BFMeshUtilS.add_railing(st_fence, Vector3(a.x, 0.0, a.y), Vector3(b.x, 0.0, b.y), 0.0, 1.05, 0.05)
                 _commit_mesh(site, st_fence, _resolve_mat("metal_dark", style), "Fence")
 
 

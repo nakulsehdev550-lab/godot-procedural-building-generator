@@ -99,6 +99,19 @@ static func add_quad(st: SurfaceTool, pts: Array, n: Vector3, uvs: Array) -> voi
                 st.add_vertex(pts[i])
 
 
+## DOUBLE-SIDED quad: emits the quad plus a reversed copy with the negated
+## normal. Use for roof surfaces that are legitimately visible from BOTH
+## sides (shed slopes seen from behind, gable end walls read through openings)
+## - kills the whole single-sided culling guessing game for those pieces.
+static func add_quad_double(st: SurfaceTool, pts: Array, n: Vector3, uvs: Array) -> void:
+        add_quad(st, pts, n, uvs)
+        var rev := pts.duplicate()
+        rev.reverse()
+        var ruv := uvs.duplicate()
+        ruv.reverse()
+        add_quad(st, rev, -n, ruv)
+
+
 ## Cylinder along local Y, centered at origin of xf (base at -h, top at +h).
 static func add_cylinder(st: SurfaceTool, xf: Transform3D, radius: float, height: float, segments := 12, uv_tile := Vector2(0.5, 0.5), caps := true, smooth_side := true) -> void:
         var h := height * 0.5

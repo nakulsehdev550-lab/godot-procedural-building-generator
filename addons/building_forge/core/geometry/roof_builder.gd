@@ -234,6 +234,75 @@ static func _fascia(st: SurfaceTool, poly: PackedVector2Array, y0: float, y1: fl
                         Vector2(b.x * tile.x, -y1 * tile.y), Vector2(b.x * tile.x, -y0 * tile.y)])
 
 
+## Roof underside height in OBB-local coords (x along the ridge, z across).
+## Shared by the notch infill walls and chimney placement.
+static func pitched_height(kind: int, hx: float, hz: float, pitch: float, pitch2: float, lx: float, lz: float) -> float:
+        var az := absf(lz)
+        var ax := absf(lx)
+        match kind:
+                RoofKind.GABLE:
+                        return hz * pitch * (1.0 - clampf(az / hz, 0.0, 1.0))
+                RoofKind.GAMBREL:
+                        var kz := hz * 0.45
+                        var h1 := (hz - kz) * pitch2
+                        if az >= kz:
+                                return (hz - az) / maxf(hz - kz, 0.05) * h1
+                        return h1 + (kz - az) * pitch
+                RoofKind.MANSARD:
+                        var s := minf(hx, hz) * 0.38
+                        var ledge := s * pitch2
+                        var upper := maxf(hz - s, 0.05)
+                        var t := clampf(az / upper, 0.0, 1.0)
+                        return ledge * (1.0 - t * 0.55) + (upper - az) * pitch * 0.6
+                RoofKind.SHED:
+                        return 2.0 * hz * pitch * clampf((hz - lz) / (2.0 * hz), 0.0, 1.0)
+                _:  # HIP and fallback
+                        var rh := hz * pitch
+                        var end_run := maxf(hx - hz, 0.05)
+                        var t_end := clampf((ax - end_run) / maxf(hz, 0.05), 0.0, 1.0)
+                        var t_side := clampf(az / hz, 0.0, 1.0)
+                        return rh * (1.0 - maxf(t_end, t_side))
+
+
+## Notch infill: on concave footprints (L/T/U) the pitched roof spans the
+## full oriented bounding box, so it can hover meters above the notch walls.
+## This fills the gap: for every footprint edge that sits well inside the
+## OBB, a vertical wall rises from the wall top to the roof underside -
+## like a real building's clerestory under a big roof plane.
+static func _notch_infill(st: SurfaceTool, fp: BFFootprint, xfrm: Transform3D,
+        hx: float, hz: float, wall_top: float, kind: int, pitch: float, pitch2: float, tile: Vector2) -> void:
+        var obb_area := 4.0 * hx * hz
+        if fp.area() > obb_area * 0.92:
+                return  # convex enough - nothing to fill
+        var inv := xfrm.affine_inverse()
+        var n := fp.points.size()
+        for i in n:
+                var a: Vector2 = fp.points[i]
+                var b: Vector2 = fp.points[(i + 1) % n]
+                var la: Vector3 = inv * Vector3(a.x, 0, a.y)
+                var lb: Vector3 = inv * Vector3(b.x, 0, b.y)
+                var ha := pitched_height(kind, hx, hz, pitch, pitch2, la.x, la.z)
+                var hb := pitched_height(kind, hx, hz, pitch, pitch2, lb.x, lb.z)
+                # edge midpoint depth into the OBB: infill only where the roof
+                # is far above the wall (meters of headroom to fill)
+                var mid := (la + lb) * 0.5
+                var hm := pitched_height(kind, hx, hz, pitch, pitch2, mid.x, mid.z)
+                if hm - wall_top < 0.35:
+                        continue
+                var wa: Vector3 = xfrm * Vector3(la.x, wall_top - 0.05, la.z)
+                var wb: Vector3 = xfrm * Vector3(lb.x, wall_top - 0.05, lb.z)
+                var ta: Vector3 = xfrm * Vector3(la.x, ha + 0.04, la.z)
+                var tb: Vector3 = xfrm * Vector3(lb.x, ha * 0.0 + hb + 0.04, lb.z)
+                var d := (Vector3(b.x, 0, b.y) - Vector3(a.x, 0, a.y))
+                if d.length() < 0.05:
+                        continue
+                var n_out := Vector3(d.y, 0, -d.x).normalized()
+                BFMeshUtilS.add_quad_double(st,
+                        [wa, wb, tb, ta], n_out,
+                        [Vector2(a.x * tile.x, wall_top * tile.y), Vector2(b.x * tile.x, wall_top * tile.y),
+                        Vector2(b.x * tile.x, hb * tile.y), Vector2(a.x * tile.x, ha * tile.y)])
+
+
 static func _pitched_xfrm(fp: BFFootprint, base_y: float, overhang: float) -> Array:
         var obb := oriented_bbox(fp.points)
         var center: Vector2 = obb[0]
@@ -279,6 +348,7 @@ static func _build_gable(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint,
                         xfrm.basis * Vector3(sx, 0, 0),
                         [Vector2(0, 0), Vector2(hz * tile.x, ridge_h * tile.y), Vector2(2 * hz * tile.x, 0)])
         # seal interior
+        _notch_infill(st_trim, fp, xfrm, hx, hz, base_y, RoofKind.GABLE, pitch, pitch, tile)
         _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
@@ -313,6 +383,7 @@ static func _build_hip(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, b
                         [xfrm * Vector3(sx * hx, eave_y, -sx * hz), xfrm * r, xfrm * Vector3(sx * hx, eave_y, sx * hz)],
                         xfrm.basis * Vector3(sx, 0, 0).normalized(),
                         [Vector2(0, 0), Vector2(hz * tile.x, ridge_h * tile.y), Vector2(2 * hz * tile.x, 0)])
+        _notch_infill(st_trim, fp, xfrm, hx, hz, base_y, RoofKind.HIP, pitch, pitch, tile)
         _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
@@ -369,6 +440,7 @@ static func _build_mansard(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprin
                         [xfrm * Vector3(sx * kx, h1, -sx * kz), xfrm * r, xfrm * Vector3(sx * kx, h1, sx * kz)],
                         xfrm.basis * Vector3(sx, 0, 0).normalized(),
                         [Vector2(0, h1 * tile.y), Vector2(kz * tile.x, ridge_h * tile.y), Vector2(2 * kz * tile.x, h1 * tile.y)])
+        _notch_infill(st_trim, fp, xfrm, hx, hz, base_y, RoofKind.MANSARD, pitch, pitch2, tile)
         _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
@@ -403,19 +475,22 @@ static func _build_gambrel(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprin
                         n_upper,
                         [Vector2(-hx * tile.x, zk * tile.y), Vector2(hx * tile.x, zk * tile.y),
                         Vector2(hx * tile.x, 0), Vector2(-hx * tile.x, 0)])
-        # gable end pentagons (x = +/-hx), fan-triangulated: 3 tris each
+## Gable end pentagons (x = +/-hx), fan-triangulated: 3 tris each. Emitted
+## DOUBLE-SIDED: gable ends are read through the roof from odd angles and a
+## single winding only ever closes one of the two mirrored ends.
         for sx in [-1.0, 1.0]:
                 var pts := [
-                        Vector3(sx * hx, eave_y, hz), Vector3(sx * hx, h1, kz),
-                        Vector3(sx * hx, ridge_h, 0), Vector3(sx * hx, h1, -kz),
-                        Vector3(sx * hx, eave_y, -hz)]
+                        Vector3(sx * hx, eave_y, -hz), Vector3(sx * hx, h1, -kz),
+                        Vector3(sx * hx, ridge_h, 0), Vector3(sx * hx, h1, kz),
+                        Vector3(sx * hx, eave_y, hz)]
                 var nn := xfrm.basis * Vector3(sx, 0, 0)
                 for tri in [[0, 1, 2], [0, 2, 3], [0, 3, 4]]:
                         var uvs := [Vector2(0, 0), Vector2(hz * tile.x, h1 * tile.y), Vector2(2 * hz * tile.x, ridge_h * tile.y),
                                 Vector2(3 * hz * tile.x, h1 * tile.y), Vector2(4 * hz * tile.x, 0)]
-                        BFMeshUtilS.add_quad(st,
+                        BFMeshUtilS.add_quad_double(st,
                                 [xfrm * pts[tri[0]], xfrm * pts[tri[1]], xfrm * pts[tri[2]]], nn,
                                 [uvs[tri[0]], uvs[tri[1]], uvs[tri[2]]])
+        _notch_infill(st_trim, fp, xfrm, hx, hz, base_y, RoofKind.GAMBREL, pitch, pitch2, tile)
         _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
@@ -431,18 +506,22 @@ static func _build_shed(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, 
         var hr := 2.0 * hz * pitch     # ridge height at the high (-z) side
         var eave_y := -0.02
         var n_slope := Vector3(0, cos(atan(pitch)), sin(atan(pitch))).normalized()
-        BFMeshUtilS.add_quad(st,
+        # single slope: DOUBLE-SIDED (from behind you would otherwise look
+        # straight through the only roof surface onto the deck)
+        BFMeshUtilS.add_quad_double(st,
                 [xfrm * Vector3(-hx, eave_y, hz), xfrm * Vector3(hx, eave_y, hz),
                 xfrm * Vector3(hx, hr, -hz), xfrm * Vector3(-hx, hr, -hz)], n_slope,
                 [Vector2(-hx * tile.x, hz * tile.y), Vector2(hx * tile.x, hz * tile.y),
                 Vector2(hx * tile.x, -hz * tile.y), Vector2(-hx * tile.x, -hz * tile.y)])
-        # high-side wall face under the ridge (closes the -z gable band)
+        # high-side wall face under the ridge (closes the -z gable band),
+        # double-sided for the same reason
         for sx in [-1.0, 1.0]:
-                BFMeshUtilS.add_quad(st,
-                        [xfrm * Vector3(sx * hx, eave_y, -hz), xfrm * Vector3(sx * hx, eave_y, hz),
+                BFMeshUtilS.add_quad_double(st,
+                        [xfrm * Vector3(sx * hx, eave_y, hz), xfrm * Vector3(sx * hx, eave_y, -hz),
                         xfrm * Vector3(sx * hx, hr, -hz)],
                         xfrm.basis * Vector3(sx, 0, 0),
                         [Vector2(0, 0), Vector2(2 * hz * tile.x, 0), Vector2(2 * hz * tile.x, hr * tile.y)])
+        _notch_infill(st_trim, fp, xfrm, hx, hz, base_y, RoofKind.SHED, pitch, pitch, tile)
         _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
