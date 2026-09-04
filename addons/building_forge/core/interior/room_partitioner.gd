@@ -530,7 +530,9 @@ static func assign_kinds(rooms: Array, floor_i: int, floor_count: int, rng: Rand
         if office_building:
                 for i in large.size():
                         var r: Room = large[i]
-                        if i == 0 and large.size() > 2:
+                        if floor_i == 0 and i == 0:
+                                r.kind = "lobby"       # reception at the entrance level
+                        elif i == 0 and large.size() > 2:
                                 r.kind = "dining"      # break / meeting room with table
                         elif i == 1 and large.size() > 3:
                                 r.kind = "lounge"

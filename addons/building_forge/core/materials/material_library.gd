@@ -93,19 +93,43 @@ static func _build(id: String, style_dir: String) -> StandardMaterial3D:
 
 
 ## Glass is parameter-only (no textures).
+## DEPTH_PRE_PASS is the fix for thin panes: without it the two faces of the
+## same glass box blend in triangle order (the back face can draw OVER the
+## front one -> "transparent from one side" look) and shimmer/z-fight at
+## glancing angles. With a depth pre-pass only the nearest face renders, so
+## glass looks correct from BOTH sides and never self-fights.
 static func get_glass(dark := false) -> StandardMaterial3D:
         var id := "glass_dark" if dark else "glass"
         if _cache.has(id):
                 return _cache.get(id)
         var mat := StandardMaterial3D.new()
         mat.resource_name = id
-        mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+        mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
         mat.albedo_color = FLAT_COLORS.get(id, Color(0.7, 0.85, 0.9, 0.3))
         mat.roughness = 0.07
         mat.metallic = 0.15
         mat.metallic_specular = 0.6
         mat.cull_mode = BaseMaterial3D.CULL_BACK
         _cache[id] = mat
+        return mat
+
+
+## Returns a tinted variant of a library material (per-building facade / roof
+## paint). Tint multiplies the albedo (works over textures AND flat colors).
+## Cached per (id, style, hex tint) so buildings sharing a color share one
+## material instance.
+static func get_tinted(id: String, style_dir: String, tint: Color) -> StandardMaterial3D:
+        if tint == Color.WHITE or id == "glass" or id == "glass_dark" or id == "__glass":
+                return get_material(id, style_dir)
+        var key := "%s/%s#%s" % [style_dir, id, tint.to_html()]
+        if _cache.has(key):
+                return _cache.get(key)
+        var base := get_material(id, style_dir)
+        var mat := base.duplicate() as StandardMaterial3D
+        mat.resource_name = id + "_tinted"
+        var a := base.albedo_color
+        mat.albedo_color = Color(a.r * tint.r, a.g * tint.g, a.b * tint.b, a.a)
+        _cache[key] = mat
         return mat
 
 

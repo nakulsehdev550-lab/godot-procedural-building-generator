@@ -16,13 +16,25 @@ const BFWallBuilderS := preload("res://addons/building_forge/core/geometry/wall_
 ## balcony_edge / balcony_u: when a balcony is built on this floor, the door
 ## span on that edge is reserved here (no window overlaps it; the wall gets a
 ## full-height "balcony_door" opening that _build_balcony dresses later).
+## window_style_override: per-floor window style (BFFloorOverride), -1 = global.
+## custom_openings: user-cut openings (from the right-click wall tool); each
+##   {point: Vector2, width, height, sill, kind} - matched to the nearest
+##   edge by position so they FOLLOW the wall when vertices are dragged.
 ## Returns Dictionary { edge_index: Array[Dictionary] }
 ## each: {u1,u2,v1,v2, kind:"window"/"door"/"balcony_door", edge:int}
 static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFParams, rng: RandomNumberGenerator,
-                balcony_edge := -1, balcony_u := Vector2.ZERO) -> Dictionary:
+                balcony_edge := -1, balcony_u := Vector2.ZERO, window_style_override := -1,
+                custom_openings: Array = [], floor_i := 0) -> Dictionary:
         var openings := {}
-        var entrance_edge := _pick_entrance_edge(fp)
+        var entrance_edge := _pick_entrance_edge(fp, p)
         var skip_entrance := not _has_entrance(fp, base_y)
+        var style: int = window_style_override if window_style_override >= 0 else p.window_style
+        var floor_openings: Array = []
+        for co in custom_openings:
+                var c: Dictionary = co
+                if int(c.get("floor", 0)) == floor_i:
+                        floor_openings.append(c)
+        var customs := _customs_by_edge(fp, floor_openings)
         for e in fp.edge_count():
                 var is_balcony_edge := e == balcony_edge and balcony_u.y > balcony_u.x
                 var list: Array = []
@@ -50,7 +62,7 @@ static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFPar
                         if not list.is_empty():
                                 openings[e] = list
                         continue
-                match p.window_style:
+                match style:
                         BFParams.WindowStyle.CURTAIN:
                                 list = _layout_curtain(elen, wall_h, p, e == entrance_edge and not skip_entrance)
                         BFParams.WindowStyle.TALL:
@@ -80,14 +92,118 @@ static func layout_floor(fp: BFFootprint, base_y: float, wall_h: float, p: BFPar
                         })
                 if not list.is_empty():
                         openings[e] = list
+                # user-cut openings (right-click wall tool) - merge AFTER auto
+                # layout so they win over auto windows; entrance/balcony doors
+                # keep priority (custom openings overlapping them are dropped)
+                if customs.has(e):
+                        var bu := balcony_u if (is_balcony_edge and balcony_u.y > balcony_u.x) else Vector2.ZERO
+                        var merged := _merge_custom(openings.get(e, []), customs[e], elen, wall_h,
+                                e == entrance_edge and not skip_entrance, bu)
+                        if not merged.is_empty():
+                                openings[e] = merged
         return openings
+
+
+## Groups custom openings (position-stored) onto footprint edges.
+## An opening belongs to the nearest edge within 0.35 m with t in [0,1].
+static func _customs_by_edge(fp: BFFootprint, custom_openings: Array) -> Dictionary:
+        var out := {}
+        for co in custom_openings:
+                var c: Dictionary = co
+                var pt: Vector2 = c.point
+                var n := fp.points.size()
+                var best_d := 0.35
+                var best := -1
+                var best_t := 0.0
+                for i in n:
+                        var a := fp.points[i]
+                        var b := fp.points[(i + 1) % n]
+                        var ab := b - a
+                        var l2 := ab.length_squared()
+                        if l2 < 0.0001:
+                                continue
+                        var t := clampf((pt - a).dot(ab) / l2, 0.0, 1.0)
+                        var d := (a + ab * t).distance_to(pt)
+                        if d < best_d:
+                                best_d = d
+                                best = i
+                                best_t = t
+                if best < 0:
+                        continue
+                if not out.has(best):
+                        out[best] = []
+                var elen := fp.edge_length(best)
+                var w: float = c.get("width", 1.2)
+                if fp.is_circular:
+                        w = minf(w, elen - 0.2)  # tessellated edges are short
+                (out[best] as Array).append({
+                        "u": best_t * elen, "width": w,
+                        "height": c.get("height", 1.4), "sill": c.get("sill", 0.9),
+                        "kind": c.get("kind", "window")})
+        return out
+
+
+## Merges user-cut openings into one edge's opening list. User openings
+## replace overlapping auto windows; they are dropped if they would overlap
+## the entrance or balcony door (those are structural).
+static func _merge_custom(list: Array, customs: Array, elen: float, wall_h: float,
+                is_entrance: bool, balcony_u: Vector2) -> Array:
+        var out := list.duplicate()
+        for c in customs:
+                var cu: Dictionary = c
+                var w: float = cu.width
+                var u_center: float = cu.u
+                var u1: float = clampf(u_center - w * 0.5, 0.1, elen - 0.1 - w)
+                var u2: float = u1 + w
+                if u2 <= u1:
+                        continue
+                var v1: float = clampf(cu.sill, 0.0, maxf(0.0, wall_h - 0.4))
+                var v2: float = minf(v1 + cu.height, wall_h - 0.12)
+                if v2 - v1 < 0.35:
+                        continue
+                # door openings sit on the floor: v1 = 0
+                if cu.kind == "door":
+                        v1 = 0.0
+                        v2 = minf(cu.height, wall_h - 0.12)
+                # drop if overlapping the entrance door / balcony door span
+                if is_entrance and v1 < 0.1:
+                        continue
+                if balcony_u.y > balcony_u.x and u2 > balcony_u.x - 0.05 and u1 < balcony_u.y + 0.05:
+                        continue
+                # drop auto openings that overlap this span
+                var kept: Array = []
+                for o in out:
+                        var od: Dictionary = o
+                        var overlap_u := float(od.u2) > u1 - 0.08 and float(od.u1) < u2 + 0.08
+                        var overlap_v := float(od.v2) > v1 + 0.05 and float(od.v1) < v2 - 0.05
+                        if not (overlap_u and overlap_v):
+                                kept.append(o)
+                out = kept
+                out.append({"u1": u1, "u2": u2, "v1": v1, "v2": v2, "kind": cu.kind, "edge": -1})
+        return out
 
 
 static func _has_entrance(fp: BFFootprint, base_y: float) -> bool:
         return base_y < 0.01  # ground floor only
 
 
-static func _pick_entrance_edge(fp: BFFootprint) -> int:
+static func _pick_entrance_edge(fp: BFFootprint, p: BFParams = null) -> int:
+        # user override: edge nearest to entrance_point (survives vertex edits)
+        if p != null and p.entrance_point.x != INF:
+                var n := fp.points.size()
+                var best := fp.longest_edge()
+                var best_d := INF
+                for i in n:
+                        var a := fp.points[i]
+                        var b := fp.points[(i + 1) % n]
+                        var ab := b - a
+                        var l2 := ab.length_squared()
+                        var t := 0.5 if l2 < 0.0001 else clampf((p.entrance_point - a).dot(ab) / l2, 0.0, 1.0)
+                        var d := (a + ab * t).distance_to(p.entrance_point)
+                        if d < best_d:
+                                best_d = d
+                                best = i
+                return best
         # longest edge (stable, no rng: entrance stays put when tweaking)
         return fp.longest_edge()
 
@@ -165,9 +281,11 @@ static func build_window(st_frame: SurfaceTool, st_glass: SurfaceTool, edge_a: V
         var basis := Basis(edge_dir_3(edge_dir), Vector3.UP, outward)
         var frame_t := 0.055
         var depth := thickness + 0.06
-        # glass pane centered in wall depth
+        # glass pane: REAL glazing thickness (0.05 m) centered in the wall
+        # depth - combined with the depth-pre-pass glass material this kills
+        # the one-face/see-through look and never self-z-fights
         var glass_t := Transform3D(basis, Vector3(c.x, base_y + v1 + h * 0.5, c.y))
-        BFMeshUtilS.add_box(st_glass, glass_t, Vector3(w - frame_t * 1.4, h - frame_t * 1.4, 0.02), tile)
+        BFMeshUtilS.add_box(st_glass, glass_t, Vector3(w - frame_t * 1.4, h - frame_t * 1.4, 0.05), tile)
         if p.window_frames:
                 var fxf := Transform3D(basis, Vector3(c.x, base_y + v1 + h * 0.5, c.y))
                 # 4 frame members
@@ -205,7 +323,7 @@ static func build_door(st_frame: SurfaceTool, st_panel: SurfaceTool, edge_a: Vec
         BFMeshUtilS.add_box(st_frame, hx, Vector3(0.03, 0.14, 0.03), tile)
         if glass_door:
                 var gt := Transform3D(basis, Vector3(c.x, base_y + h * 0.55, c.y))
-                BFMeshUtilS.add_box(st_panel, gt, Vector3(w - 0.06, h * 0.7, 0.015), tile)
+                BFMeshUtilS.add_box(st_panel, gt, Vector3(w - 0.06, h * 0.7, 0.04), tile)
 
 
 static func edge_dir_3(d2: Vector2) -> Vector3:

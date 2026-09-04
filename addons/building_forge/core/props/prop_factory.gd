@@ -37,6 +37,9 @@ static func _registry() -> Dictionary:
                 "shower": _shower,
                 "desk_pc": _desk_pc,
                 "washing_machine": _washing_machine,
+                "fireplace": _fireplace,
+                "armchair": _armchair,
+                "reception_desk": _reception_desk,
         }
 
 
@@ -275,11 +278,38 @@ static func _washing_machine(b: BoxCollector, rng: RandomNumberGenerator) -> voi
         b.cyl("glass_dark", Transform3D(Basis.IDENTITY, Vector3(0, 0.45, 0.3)), 0.2, 0.03, 14)
 
 
+static func _fireplace(b: BoxCollector, rng: RandomNumberGenerator) -> void:
+        b.box("stone", Transform3D(Basis.IDENTITY, Vector3(0, 0.55, 0)), Vector3(1.5, 1.1, 0.42))
+        b.box("stone", Transform3D(Basis.IDENTITY, Vector3(0, 1.22, 0)), Vector3(1.7, 0.12, 0.5))
+        b.box("carpet", Transform3D(Basis.IDENTITY, Vector3(0, 0.35, 0.13)), Vector3(0.9, 0.7, 0.2))  # firebox soot
+        for i in 3:
+                b.box("brick_red", Transform3D(Basis.IDENTITY, Vector3(-0.25 + i * 0.25, 0.24, 0.12)), Vector3(0.16, 0.1, 0.12))
+        b.box("wood_dark", Transform3D(Basis.IDENTITY, Vector3(0, 0.18, 0.12)), Vector3(0.5, 0.1, 0.1))
+
+
+static func _armchair(b: BoxCollector, rng: RandomNumberGenerator) -> void:
+        b.box("fabric_sofa", Transform3D(Basis.IDENTITY, Vector3(0, 0.25, 0)), Vector3(0.85, 0.35, 0.8))
+        b.box("fabric_sofa", Transform3D(Basis.IDENTITY, Vector3(0, 0.6, 0.3)), Vector3(0.85, 0.55, 0.2))
+        for sx in [-1.0, 1.0]:
+                b.box("fabric_sofa", Transform3D(Basis.IDENTITY, Vector3(sx * 0.33, 0.52, 0.05)), Vector3(0.18, 0.32, 0.72))
+        for sx in [-1.0, 1.0]:
+                for sz in [-1.0, 1.0]:
+                        b.cyl("wood_dark", Transform3D(Basis.IDENTITY, Vector3(sx * 0.36, 0.05, sz * 0.34)), 0.025, 0.1, 8)
+
+
+static func _reception_desk(b: BoxCollector, rng: RandomNumberGenerator) -> void:
+        b.box("wood_dark", Transform3D(Basis.IDENTITY, Vector3(0, 0.55, 0)), Vector3(2.2, 1.1, 0.75))
+        b.box("stone", Transform3D(Basis.IDENTITY, Vector3(0, 1.12, 0.02)), Vector3(2.3, 0.05, 0.85))
+        b.box("wood_light", Transform3D(Basis.IDENTITY, Vector3(0, 0.85, 0.39)), Vector3(2.0, 0.2, 0.02))
+        b.box("appliance", Transform3D(Basis.IDENTITY, Vector3(0.5, 1.25, -0.1)), Vector3(0.4, 0.28, 0.05))
+
+
 ## Places props for a room of given kind. doors: Array of
 ## {pos: Vector2, dir: Vector2} door touch points (XZ) - furniture is kept
-## out of door swing zones so rooms stay walkable. Returns Array of
-## {id, pos: Vector3, rot_y: float} in building-local coords.
-static func layout_room(kind: String, rect: Rect2, door_dirs: Array, base_y: float, rng: RandomNumberGenerator) -> Array:
+## out of door swing zones so rooms stay walkable. theme: architecture hint
+## ("classic"/"modern"/"brick"/"office") - picks house-type furniture.
+## Returns Array of {id, pos: Vector3, rot_y: float} in building-local coords.
+static func layout_room(kind: String, rect: Rect2, door_dirs: Array, base_y: float, rng: RandomNumberGenerator, theme := "") -> Array:
         var out: Array = []
         var c := rect.get_center()
         match kind:
@@ -304,6 +334,12 @@ static func layout_room(kind: String, rect: Rect2, door_dirs: Array, base_y: flo
                         out.append({"id": "floor_lamp", "pos": _v3(rect.position.x + 0.4, base_y, rect.end.y - 0.5), "rot_y": 0.0})
                         out.append({"id": "plant", "pos": _v3(rect.position.x + 0.4, base_y, rect.position.y + 0.4), "rot_y": 0.0})
                         out.append({"id": "rug", "pos": _v3(c.x, base_y, c.y - 0.3), "rot_y": 0.0})
+                        # house-type flavor: cottage/village living rooms get a
+                        # fireplace; modern living rooms get an armchair corner
+                        if theme == "classic" and rect.get_area() > 16.0:
+                                out.append({"id": "fireplace", "pos": _v3(c.x, base_y, rect.end.y - 0.25), "rot_y": PI})
+                        elif theme == "modern":
+                                out.append({"id": "armchair", "pos": _v3(rect.position.x + 0.6, base_y, c.y - 0.6), "rot_y": PI * 0.5})
                 "lounge":
                         out.append({"id": "sofa", "pos": _v3(c.x, base_y, c.y - 0.4), "rot_y": 0.0})
                         out.append({"id": "coffee_table", "pos": _v3(c.x, base_y, c.y + 0.75), "rot_y": 0.0})
@@ -339,6 +375,12 @@ static func layout_room(kind: String, rect: Rect2, door_dirs: Array, base_y: flo
                         out.append({"id": "chair", "pos": _v3(c.x, base_y, rect.position.y + 1.05), "rot_y": PI})
                         out.append({"id": "bookshelf", "pos": _v3(rect.end.x - 0.35, base_y, c.y), "rot_y": -PI * 0.5})
                         out.append({"id": "plant", "pos": _v3(rect.position.x + 0.35, base_y, rect.end.y - 0.35), "rot_y": 0.0})
+                "lobby":
+                        out.append({"id": "reception_desk", "pos": _v3(c.x, base_y, c.y - 0.4), "rot_y": 0.0})
+                        out.append({"id": "sofa", "pos": _v3(c.x - 0.2, base_y, rect.end.y - 1.0), "rot_y": PI})
+                        out.append({"id": "plant", "pos": _v3(rect.position.x + 0.5, base_y, rect.position.y + 0.5), "rot_y": 0.0})
+                        out.append({"id": "plant", "pos": _v3(rect.end.x - 0.5, base_y, rect.position.y + 0.5), "rot_y": 0.0})
+                        out.append({"id": "rug", "pos": _v3(c.x, base_y, c.y + 0.6), "rot_y": 0.0})
                 "stair":
                         out.append({"id": "floor_lamp", "pos": _v3(rect.position.x + 0.3, base_y, rect.position.y + 0.3), "rot_y": 0.0})
                 "storage":

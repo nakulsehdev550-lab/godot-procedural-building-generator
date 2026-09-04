@@ -10,7 +10,7 @@ const BFMeshUtilS := preload("res://addons/building_forge/core/geometry/mesh_uti
 const BFSlabBuilderS := preload("res://addons/building_forge/core/geometry/slab_builder.gd")
 const BFWallBuilderS := preload("res://addons/building_forge/core/geometry/wall_builder.gd")
 
-enum RoofKind { FLAT, GABLE, HIP, CONE, DOME }
+enum RoofKind { FLAT, GABLE, HIP, CONE, DOME, MANSARD, GAMBREL, SHED }
 
 
 static func to3(p: Vector2, y: float) -> Vector3:
@@ -76,6 +76,12 @@ static func build_roof(kind: int, st: SurfaceTool, st_trim: SurfaceTool, fp: BFF
                         _build_cone(st, st_trim, fp, base_y, overhang, params.get("cone_pitch", 0.8), tile)
                 RoofKind.DOME:
                         _build_dome(st, fp, base_y - 0.28, tile)  # seat dome on wall tops
+                RoofKind.MANSARD:
+                        _build_mansard(st, st_trim, fp, base_y, overhang, pitch, params.get("pitch2", 1.3), tile)
+                RoofKind.GAMBREL:
+                        _build_gambrel(st, st_trim, fp, base_y, overhang, pitch, params.get("pitch2", 1.3), tile)
+                RoofKind.SHED:
+                        _build_shed(st, st_trim, fp, base_y, overhang, pitch, tile)
 
 
 ## Eave soffit: horizontal band from the wall face out to the ACTUAL roof
@@ -314,6 +320,136 @@ static func _build_hip(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, b
                         [xfrm * Vector3(sx * hx, eave_y, sx * hz), xfrm * r, xfrm * Vector3(sx * hx, eave_y, -sx * hz)],
                         xfrm.basis * Vector3(sx, 0, 0).normalized(),
                         [Vector2(0, 0), Vector2(hz * tile.x, ridge_h * tile.y), Vector2(2 * hz * tile.x, 0)])
+        _deck(st, fp, base_y - 0.02, tile)
+        _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
+
+
+## Mansard: steep lower slope (pitch2) around all four sides rising to a
+## setback, then a shallow hip (pitch) on the setback rectangle. Classic
+## Parisian / Second Empire roof.
+static func _build_mansard(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, base_y: float,
+                overhang: float, pitch: float, pitch2: float, tile: Vector2) -> void:
+        var p := _pitched_xfrm(fp, base_y, overhang)
+        var xfrm: Transform3D = p[0]
+        var hx: float = p[1]
+        var hz: float = p[2]
+        var s := minf(hx, hz) * 0.38   # horizontal run of the steep lower slope
+        var kx := hx - s
+        var kz := hz - s
+        var h1 := s * pitch2           # lower band top (setback ledge)
+        var eave_y := -0.02
+        var uv0 := Vector2(-hx * tile.x, -hz * tile.y)
+        # lower band: 4 trapezoids from the eave rect to the setback rect
+        var eave := [Vector3(-hx, eave_y, -hz), Vector3(hx, eave_y, -hz), Vector3(hx, eave_y, hz), Vector3(-hx, eave_y, hz)]
+        var ledge := [Vector3(-kx, h1, -kz), Vector3(kx, h1, -kz), Vector3(kx, h1, kz), Vector3(-kx, h1, kz)]
+        var band_n := [Vector3(0, cos(atan(pitch2)), -sin(atan(pitch2))).normalized(),
+                Vector3(0, cos(atan(pitch2)), sin(atan(pitch2))).normalized(),
+                Vector3(cos(atan(pitch2)), 0, 0).normalized(),
+                Vector3(-cos(atan(pitch2)), 0, 0).normalized()]
+        var band_pairs := [[0, 1, 0], [2, 3, 1], [1, 2, 2], [3, 0, 3]]
+        for bp in band_pairs:
+                var i0: int = bp[0]
+                var i1: int = bp[1]
+                BFMeshUtilS.add_quad(st,
+                        [xfrm * eave[i0], xfrm * eave[i1], xfrm * ledge[i1], xfrm * ledge[i0]],
+                        xfrm.basis * band_n[bp[2]],
+                        [uv0, Vector2(hx * tile.x, -hz * tile.y), Vector2(kx * tile.x, h1 * tile.y), Vector2(-kx * tile.x, h1 * tile.y)])
+        # upper hip over the setback rectangle
+        var ridge_h: float = h1 + kz * pitch
+        var ridge_half: float = maxf(0.05, kx - kz)
+        var r0 := Vector3(-ridge_half, ridge_h, 0)
+        var r1 := Vector3(ridge_half, ridge_h, 0)
+        BFMeshUtilS.add_quad(st,
+                [xfrm * Vector3(-kx, h1, -kz), xfrm * r0, xfrm * r1, xfrm * Vector3(kx, h1, -kz)],
+                Vector3(0, cos(atan(pitch)), -sin(atan(pitch))).normalized(),
+                [Vector2(-kx * tile.x, -kz * tile.y), Vector2(-ridge_half * tile.x, h1 * tile.y),
+                Vector2(ridge_half * tile.x, h1 * tile.y), Vector2(kx * tile.x, -kz * tile.y)])
+        BFMeshUtilS.add_quad(st,
+                [xfrm * Vector3(kx, h1, kz), xfrm * r1, xfrm * r0, xfrm * Vector3(-kx, h1, kz)],
+                Vector3(0, cos(atan(pitch)), sin(atan(pitch))).normalized(),
+                [Vector2(kx * tile.x, kz * tile.y), Vector2(ridge_half * tile.x, h1 * tile.y),
+                Vector2(-ridge_half * tile.x, h1 * tile.y), Vector2(-kx * tile.x, kz * tile.y)])
+        for sd in [[1.0, r1], [-1.0, r0]]:
+                var sx: float = sd[0]
+                var r: Vector3 = sd[1]
+                BFMeshUtilS.add_quad(st,
+                        [xfrm * Vector3(sx * kx, h1, sx * kz), xfrm * r, xfrm * Vector3(sx * kx, h1, -sx * kz)],
+                        xfrm.basis * Vector3(sx, 0, 0).normalized(),
+                        [Vector2(0, h1 * tile.y), Vector2(kz * tile.x, ridge_h * tile.y), Vector2(2 * kz * tile.x, h1 * tile.y)])
+        _deck(st, fp, base_y - 0.02, tile)
+        _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
+
+
+## Gambrel (barn roof): two slopes per side - steep lower (pitch2) + shallow
+## upper (pitch) - with vertical gable end pentagons. Maximizes attic space.
+static func _build_gambrel(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, base_y: float,
+                overhang: float, pitch: float, pitch2: float, tile: Vector2) -> void:
+        var p := _pitched_xfrm(fp, base_y, overhang)
+        var xfrm: Transform3D = p[0]
+        var hx: float = p[1]
+        var hz: float = p[2]
+        var kz := hz * 0.45            # knee position (z of slope change)
+        var h1 := (hz - kz) * pitch2   # knee height
+        var ridge_h := h1 + kz * pitch
+        var eave_y := -0.02
+        # lower + upper slopes, both sides (quads span full hx)
+        for sd in [-1.0, 1.0]:
+                var zn: float = -hz * sd     # near side z (eave)
+                var zk: float = -kz * sd     # knee z
+                var n_lower := Vector3(0, cos(atan(pitch2)), -sin(atan(pitch2)) * sd).normalized()
+                var n_upper := Vector3(0, cos(atan(pitch)), -sin(atan(pitch)) * sd).normalized()
+                BFMeshUtilS.add_quad(st,
+                        [xfrm * Vector3(-hx, eave_y, zn), xfrm * Vector3(hx, eave_y, zn),
+                        xfrm * Vector3(hx, h1, zk), xfrm * Vector3(-hx, h1, zk)],
+                        n_lower,
+                        [Vector2(-hx * tile.x, zn * tile.y), Vector2(hx * tile.x, zn * tile.y),
+                        Vector2(hx * tile.x, zk * tile.y), Vector2(-hx * tile.x, zk * tile.y)])
+                BFMeshUtilS.add_quad(st,
+                        [xfrm * Vector3(-hx, h1, zk), xfrm * Vector3(hx, h1, zk),
+                        xfrm * Vector3(hx, ridge_h, 0), xfrm * Vector3(-hx, ridge_h, 0)],
+                        n_upper,
+                        [Vector2(-hx * tile.x, zk * tile.y), Vector2(hx * tile.x, zk * tile.y),
+                        Vector2(hx * tile.x, 0), Vector2(-hx * tile.x, 0)])
+        # gable end pentagons (x = +/-hx), fan-triangulated: 3 tris each
+        for sx in [-1.0, 1.0]:
+                var pts := [
+                        Vector3(sx * hx, eave_y, -hz), Vector3(sx * hx, h1, -kz),
+                        Vector3(sx * hx, ridge_h, 0), Vector3(sx * hx, h1, kz),
+                        Vector3(sx * hx, eave_y, hz)]
+                var nn := xfrm.basis * Vector3(sx, 0, 0)
+                for tri in [[0, 1, 2], [0, 2, 3], [0, 3, 4]]:
+                        var uvs := [Vector2(0, 0), Vector2(hz * tile.x, h1 * tile.y), Vector2(2 * hz * tile.x, ridge_h * tile.y),
+                                Vector2(3 * hz * tile.x, h1 * tile.y), Vector2(4 * hz * tile.x, 0)]
+                        BFMeshUtilS.add_quad(st,
+                                [xfrm * pts[tri[0]], xfrm * pts[tri[1]], xfrm * pts[tri[2]]], nn,
+                                [uvs[tri[0]], uvs[tri[1]], uvs[tri[2]]])
+        _deck(st, fp, base_y - 0.02, tile)
+        _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
+
+
+## Shed (lean-to / saltbox base): single slope along the OBB depth, high
+## side at -Z. Vertical gable-end right triangles.
+static func _build_shed(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, base_y: float,
+                overhang: float, pitch: float, tile: Vector2) -> void:
+        var p := _pitched_xfrm(fp, base_y, overhang)
+        var xfrm: Transform3D = p[0]
+        var hx: float = p[1]
+        var hz: float = p[2]
+        var hr := 2.0 * hz * pitch     # ridge height at the high (-z) side
+        var eave_y := -0.02
+        var n_slope := Vector3(0, cos(atan(pitch)), sin(atan(pitch))).normalized()
+        BFMeshUtilS.add_quad(st,
+                [xfrm * Vector3(-hx, eave_y, hz), xfrm * Vector3(hx, eave_y, hz),
+                xfrm * Vector3(hx, hr, -hz), xfrm * Vector3(-hx, hr, -hz)], n_slope,
+                [Vector2(-hx * tile.x, hz * tile.y), Vector2(hx * tile.x, hz * tile.y),
+                Vector2(hx * tile.x, -hz * tile.y), Vector2(-hx * tile.x, -hz * tile.y)])
+        # high-side wall face under the ridge (closes the -z gable band)
+        for sx in [-1.0, 1.0]:
+                BFMeshUtilS.add_quad(st,
+                        [xfrm * Vector3(sx * hx, eave_y, hz), xfrm * Vector3(sx * hx, eave_y, -hz),
+                        xfrm * Vector3(sx * hx, hr, -hz)],
+                        xfrm.basis * Vector3(sx, 0, 0),
+                        [Vector2(0, 0), Vector2(2 * hz * tile.x, 0), Vector2(2 * hz * tile.x, hr * tile.y)])
         _deck(st, fp, base_y - 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 

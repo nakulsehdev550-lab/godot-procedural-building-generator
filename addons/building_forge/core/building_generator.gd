@@ -38,9 +38,14 @@ const BFMatLib := preload("res://addons/building_forge/core/materials/material_l
 var _dirty := false
 var _user_moves: Dictionary = {}    # part_id -> Transform3D (preserved across regen)
 var _generating := false
+## During gizmo handle drags: true -> props/collision/site items are skipped
+## so live dragging stays fluid; a full regen runs when the drag commits.
+var fast_regen := false
 ## Debug/tooling: floor_index -> {rooms: Array[Room], walls: Array[WallSeg]}
 ## from the last generation (used by the interior tour renderer + tests).
 var last_room_layout: Dictionary = {}
+## Debug/tooling: floor_index -> facade openings dict from the last generation.
+var last_openings: Dictionary = {}
 
 
 func _ready() -> void:
@@ -91,6 +96,10 @@ func generate() -> void:
         if old_col != null:
                 remove_child(old_col)
                 old_col.free()
+        var old_site := get_node_or_null("Site")
+        if old_site != null:
+                remove_child(old_site)
+                old_site.free()
         var root := Node3D.new()
         root.name = "Generated"
         add_child(root)
@@ -107,21 +116,38 @@ func generate() -> void:
         var n_floors := params.floors
         var t := params.wall_thickness
 
-        var inner := BFWallBuilderS.inner_polygon(fp.points, t)
-        var inner_fp := BFFootprint.create(inner)
-        var interior_bounds := _rect_of(inner_fp)
+        # --- per-floor effective footprints (BFFloorOverride outset/setback) ---
+        var floor_fps: Array = []
+        var floor_inners: Array = []
+        var ov_facade: Array = []
+        var ov_style: Array = []
+        var ov_balcony: Array = []
+        for i in n_floors:
+                var ffp := _floor_footprint(fp, i)
+                floor_fps.append(ffp)
+                floor_inners.append(BFFootprint.create(BFWallBuilderS.inner_polygon(ffp.points, t)))
+                var ov := _floor_override(i)
+                ov_facade.append(ov.effective_facade(params.facade_material) if ov != null else params.facade_material)
+                ov_style.append(ov.effective_window_style(params.window_style) if ov != null else params.window_style)
+                ov_balcony.append(ov.effective_balconies(params.balconies) if ov != null else params.balconies)
+
+        var inner_0: PackedVector2Array = BFWallBuilderS.inner_polygon(floor_fps[0].points, t)
+        var inner_fp0 := BFFootprint.create(inner_0)
+        var interior_bounds := _rect_of(inner_fp0)
 
         # stair planning: polygon-aware, tries kind preferences, orientations
-        # and refits - same shaft on every floor; may legitimately fail on
-        # tiny footprints (then no stairs and NO slab hole are built)
-        var stair := _plan_stairs(fp, inner, interior_bounds, fh, rng)
+        # and refits - same shaft on every floor; must fit EVERY floor's inner
+        # polygon (setback floors are smaller - the shaft can't poke outside)
+        var stair := _plan_stairs(floor_fps, floor_inners, interior_bounds, fh, rng)
         var plan_d: Dictionary = stair.get("plan", {})
         var stair_cell: Rect2 = stair.get("cell", Rect2())
         var stair_flip: bool = stair.get("flip", false)
         var stair_hole: Rect2 = stair.get("hole", Rect2())
 
         var tri_count := 0
+        last_openings.clear()
         for i in n_floors:
+                var floor_fp: BFFootprint = floor_fps[i]
                 var base := float(i) * fh
                 var wall_h := fh - 0.3 if i > 0 else fh - 0.12
                 var wall_base := base - 0.01
@@ -140,45 +166,126 @@ func generate() -> void:
                 var balcony_edge := -1
                 var balcony_u := Vector2.ZERO
                 var has_balcony := false
-                if params.balconies and not fp.is_circular and (i > 0 or params.ground_balcony) and i % params.balcony_every_n_floors == 0:
+                if ov_balcony[i] and not floor_fp.is_circular and (i > 0 or params.ground_balcony) and i % params.balcony_every_n_floors == 0:
                         has_balcony = true
                 if has_balcony:
-                        balcony_edge = fp.longest_edge()
-                        var elen := fp.edge_length(balcony_edge)
+                        balcony_edge = floor_fp.longest_edge()
+                        var elen := floor_fp.edge_length(balcony_edge)
                         var bw := minf(3.2, elen * 0.5)
                         var door_w := minf(1.0, bw)
                         balcony_u = Vector2(elen * 0.5 - door_w * 0.5, elen * 0.5 + door_w * 0.5)
-                var open := BFFacadeS.layout_floor(fp, base, wall_h, params, rng, balcony_edge, balcony_u)
-                tri_count += _build_exterior(floor_node, surfaces, fp, wall_base, wall_h2, wall_h, t, open, rng,
-                        balcony_edge, balcony_u, has_balcony)
+                var open := BFFacadeS.layout_floor(floor_fp, base, wall_h, params, rng, balcony_edge, balcony_u,
+                        ov_style[i], params.custom_openings, i)
+                last_openings[i] = open
+                tri_count += _build_exterior(floor_node, surfaces, floor_fp, wall_base, wall_h2, wall_h, t, open, rng,
+                        balcony_edge, balcony_u, has_balcony, ov_facade[i], ov_style[i])
                 if params.generate_interior:
-                        tri_count += _build_interior(floor_node, surfaces, fp, inner_fp, base, fh, wall_h, t,
+                        tri_count += _build_interior(floor_node, surfaces, floor_fp, base, fh, wall_h, t,
                                 stair_cell, stair_hole, plan_d, stair_flip, i, n_floors, rng)
-                # slab above this floor (ceiling / next floor base)
+                # slab above this floor (ceiling / next floor base). Spans the
+                # LARGER of this floor and the next (an overhanging next floor
+                # must land on slab, not on air)
                 var slab_st := surfaces_for(surfaces, "concrete", style_dir)
                 var slab_holes: Array = []
                 if plan_d.size() > 0 and i < n_floors - 1:
                         slab_holes.append(stair_hole)
+                var slab_fp: BFFootprint = floor_fp
+                if i + 1 < n_floors and (floor_fps[i + 1] as BFFootprint).area() > floor_fp.area():
+                        slab_fp = floor_fps[i + 1]
                 # tiny outset makes the slab band a visible floor ledge and
                 # keeps it strictly non-coplanar with the wall band (z-fight)
-                BFSlabBuilderS.build_slab(slab_st, fp.outset(0.02), base + fh - 0.301, base + fh, Rect2(), Vector2(0.5, 0.5), false, slab_holes)
+                BFSlabBuilderS.build_slab(slab_st, slab_fp.outset(0.02), base + fh - 0.301, base + fh, Rect2(), Vector2(0.5, 0.5), false, slab_holes)
                 # thin sub-finish under interior walls; room finishes sit above
                 # it (different Y) so nothing is coplanar (z-fighting fix)
                 if i == 0 and params.generate_interior:
-                        BFSlabBuilderS.build_slab(surfaces_for(surfaces, "wood_floor", style_dir), inner, base + 0.001, base + 0.011, Rect2(), Vector2(0.5, 0.5), true)
-                _commit_surfaces(surfaces, floor_node, m3d, style_dir, "f%02d" % i)
+                        BFSlabBuilderS.build_slab(surfaces_for(surfaces, "wood_floor", style_dir), inner_0, base + 0.001, base + 0.011, Rect2(), Vector2(0.5, 0.5), true)
+                # facade banding: stone plinth at the base, cornice under the
+                # roofline (classical base/body/crown tripartition)
+                if params.facade_bands and not floor_fp.is_circular:
+                        if i == 0:
+                                _build_band(surfaces, style_dir, floor_fp, base, base + 0.45, 0.035, "stone")
+                        if i == n_floors - 1:
+                                _build_band(surfaces, style_dir, floor_fp, base + wall_h - 0.35, base + wall_h - 0.12, 0.05, "trim_white")
+                _commit_surfaces(surfaces, floor_node, m3d, style_dir, "f%02d" % i, {ov_facade[i]: params.facade_tint})
                 tri_count += 0
-        # roof
+        # roof (built over the TOP floor's footprint)
         var roof_node := Node3D.new()
         roof_node.name = "Roof"
         root.add_child(roof_node)
-        tri_count += _build_roof(roof_node, fp, float(n_floors) * fh, rng)
+        tri_count += _build_roof(roof_node, floor_fps[n_floors - 1], float(n_floors) * fh, rng)
+        # site: concrete pad + picket fence with a gate at the entrance
+        if not fast_regen and (params.terrain_pad or params.site_fence):
+                var site := Node3D.new()
+                site.name = "Site"
+                root.add_child(site)
+                _build_site(site, floor_fps[0])
         _apply_user_moves(root)
         stats = "floors=%d  tris=%s  parts=%d  %.1f ms" % [
                 n_floors, _fmt_int(_count_tris(root)), _count_parts(root), float(Time.get_ticks_usec() - t0) / 1000.0]
-        if params.generate_collision:
+        if params.generate_collision and not fast_regen:
                 _build_collision(root)
         queue_redraw_gizmos()
+
+
+## Effective footprint for floor i (applies BFFloorOverride.outset).
+func _floor_footprint(base_fp: BFFootprint, i: int) -> BFFootprint:
+        var ov := _floor_override(i)
+        if ov == null or absf(ov.outset) < 0.001:
+                return base_fp
+        var cand := BFFootprint.create(base_fp.outset(ov.outset))
+        cand.is_circular = base_fp.is_circular
+        if cand.validate() != "":
+                return base_fp  # outset would invert/thin the polygon: skip
+        return cand
+
+
+func _floor_override(i: int) -> BFFloorOverride:
+        if i < params.floor_overrides.size():
+                var ov: BFFloorOverride = params.floor_overrides[i]
+                if ov != null and ov.applies():
+                        return ov
+        return null
+
+
+## Facade band ring (plinth / cornice): a slim prism outset from the wall
+## face - distinct geometry so nothing is coplanar (z-fight safe).
+func _build_band(surfaces: Dictionary, style: String, fp: BFFootprint, y0: float, y1: float, outset: float, mat_id: String) -> void:
+        var st := surfaces_for(surfaces, mat_id, style)
+        var outer := fp.outset(outset)
+        var inner := BFWallBuilderS.inner_polygon(outer, outset + 0.035)
+        var n := outer.size()
+        if inner.size() != n:
+                return
+        for i in n:
+                var a: Vector2 = outer[i]
+                var b: Vector2 = outer[(i + 1) % n]
+                var a2: Vector2 = inner[i]
+                var b2: Vector2 = inner[(i + 1) % n]
+                var d := (b - a)
+                var l := d.length()
+                if l < 0.01:
+                        continue
+                d /= l
+                var d3 := Vector3(d.x, 0, d.y)
+                var n_out3 := Vector3(d.y, 0, -d.x)
+                var o_ay := Vector3(a.x, y0, a.y)
+                var o_by := Vector3(b.x, y0, b.y)
+                var o_at := Vector3(a.x, y1, a.y)
+                var o_bt := Vector3(b.x, y1, b.y)
+                var i_ay := Vector3(a2.x, y0, a2.y)
+                var i_by := Vector3(b2.x, y0, b2.y)
+                var i_at := Vector3(a2.x, y1, a2.y)
+                var i_bt := Vector3(b2.x, y1, b2.y)
+                BFMeshUtilS.add_quad(st, [o_ay, o_at, o_bt, o_by], n_out3,
+                        [Vector2(a.x * 0.5, -y0 * 0.5), Vector2(a.x * 0.5, -y1 * 0.5), Vector2(b.x * 0.5, -y1 * 0.5), Vector2(b.x * 0.5, -y0 * 0.5)])
+                BFMeshUtilS.add_quad(st, [o_at, i_at, i_bt, o_bt], Vector3.UP,
+                        [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+                BFMeshUtilS.add_quad(st, [o_ay, o_by, i_by, i_ay], Vector3.DOWN,
+                        [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+                BFMeshUtilS.add_quad(st, [o_ay, i_ay, i_at, o_at], -d3,
+                        [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+                BFMeshUtilS.add_quad(st, [o_by, o_bt, i_bt, i_by], d3,
+                        [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
 
 
 func surfaces_for(surfaces: Dictionary, mat_id: String, _style: String) -> SurfaceTool:
@@ -189,10 +296,10 @@ func surfaces_for(surfaces: Dictionary, mat_id: String, _style: String) -> Surfa
 
 func _build_exterior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, base: float,
         build_h: float, logic_h: float, t: float, openings: Dictionary, rng: RandomNumberGenerator,
-        balcony_edge := -1, balcony_u := Vector2.ZERO, has_balcony := false) -> int:
+        balcony_edge := -1, balcony_u := Vector2.ZERO, has_balcony := false, facade_mat := "", style_ov := -1) -> int:
         var p := params
         var style := p.texture_style_dir
-        var st_wall := surfaces_for(surfaces, p.facade_material, style)
+        var st_wall := surfaces_for(surfaces, facade_mat if facade_mat != "" else p.facade_material, style)
         var st_trim := surfaces_for(surfaces, "trim_white", style)
         var st_glass := surfaces_for(surfaces, "__glass", style)
         var st_door := surfaces_for(surfaces, "wood_dark", style)
@@ -200,7 +307,7 @@ func _build_exterior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
         BFWallBuilderS.build_walls(st_wall, fp, base, build_h, t, _to_wall_openings(openings), Vector2(0.5, 0.5))
         # facade elements
         var n := fp.edge_count()
-        var curtain := p.window_style == BFParams.WindowStyle.CURTAIN
+        var curtain := (style_ov if style_ov >= 0 else p.window_style) == BFParams.WindowStyle.CURTAIN
         for e in n:
                 if not openings.has(e):
                         continue
@@ -210,17 +317,53 @@ func _build_exterior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                 for o in openings[e]:
                         var od: Dictionary = o
                         if od.kind == "door":
-                                BFFacadeS.build_door(st_trim, st_door, a, d, od.u1, od.u2, od.v2, base, t, Vector2(0.5, 0.5))
+                                if p.door_scene != null:
+                                        _instance_scene(floor_node, p.door_scene,
+                                                _opening_xf(a, d, od.u1, od.u2, base, base + float(od.v2)),
+                                                "Door_e%d_%d" % [e, int(float(od.u1) * 10.0)])
+                                else:
+                                        BFFacadeS.build_door(st_trim, st_door, a, d, od.u1, od.u2, od.v2, base, t, Vector2(0.5, 0.5))
                         elif od.kind == "balcony_door":
                                 pass  # punched by the wall builder; dressed by _build_balcony
                         else:
-                                BFFacadeS.build_window(st_trim, st_glass, a, d, od.u1, od.u2, od.v1, od.v2, base, t, p, Vector2(0.5, 0.5))
-                                if curtain:
-                                        BFFacadeS.build_mullions(st_trim, a, d, od.u1, od.u2, od.v1, od.v2, base, 1.35)
+                                if p.window_scene != null:
+                                        _instance_scene(floor_node, p.window_scene,
+                                                _opening_xf(a, d, od.u1, od.u2, base + float(od.v1), base + float(od.v2)),
+                                                "Window_e%d_%d" % [e, int(float(od.u1) * 10.0)])
+                                else:
+                                        BFFacadeS.build_window(st_trim, st_glass, a, d, od.u1, od.u2, od.v1, od.v2, base, t, p, Vector2(0.5, 0.5))
+                                        if curtain:
+                                                BFFacadeS.build_mullions(st_trim, a, d, od.u1, od.u2, od.v1, od.v2, base, 1.35)
         # balcony (door span already reserved in the facade layout)
         if has_balcony:
                 _build_balcony(floor_node, st_concrete, st_trim, st_glass, fp, base, t, rng, balcony_edge, balcony_u)
         return 0
+
+
+## Opening instance transform: X along the edge, Y up, Z outward; origin at
+## the vertical center of the opening. Custom window/door scenes use this.
+func _opening_xf(a: Vector2, d: Vector2, u1: float, u2: float, v1: float, v2: float) -> Transform3D:
+        var w := u2 - u1
+        var c := a + d * (u1 + w * 0.5)
+        var outward := Vector3(d.y, 0, -d.x)
+        return Transform3D(Basis(Vector3(d.x, 0, d.y), Vector3.UP, outward),
+                Vector3(c.x, (v1 + v2) * 0.5, c.y))
+
+
+## Instances a user PackedScene (custom window/door) and tags every
+## MeshInstance3D under it with a part id so manual moves survive regen.
+func _instance_scene(parent: Node3D, scene: PackedScene, xf: Transform3D, label: String) -> Node3D:
+        var wrap := Node3D.new()
+        wrap.name = label
+        wrap.transform = xf
+        parent.add_child(wrap)
+        var inst := scene.instantiate()
+        wrap.add_child(inst)
+        for mi in wrap.find_children("*", "MeshInstance3D", true, false):
+                var pid := "%s|%s|%d" % [label, inst.name, (mi as MeshInstance3D).get_index()]
+                (mi as MeshInstance3D).set_meta("bf_part_id", pid)
+                (mi as MeshInstance3D).set_meta("bf_origin_transform", (mi as MeshInstance3D).transform)
+        return wrap
 
 
 func _build_balcony(floor_node: Node3D, st_conc: SurfaceTool, st_trim: SurfaceTool,
@@ -259,7 +402,7 @@ func d3(v: Vector2) -> Vector3:
         return Vector3(v.x, 0, v.y)
 
 
-func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, inner_fp: BFFootprint,
+func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint,
                 base: float, fh: float, wall_h: float, t: float, stair_cell: Rect2, stair_hole: Rect2,
                 plan_d: Dictionary, stair_flip: bool, floor_i: int, n_floors: int, rng: RandomNumberGenerator) -> int:
         var p := params
@@ -271,6 +414,7 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
         # partition rooms. NO pre-shrink: rooms extend to the inner face of the
         # exterior walls so windows / balcony doors open into rooms, and the
         # stairwell is a first-class room that doors always reach.
+        var inner_fp := BFFootprint.create(BFWallBuilderS.inner_polygon(fp.points, t))
         var bounds := _rect_of(inner_fp).grow(-0.02)
         var rooms: Array = []
         var walls: Array = []
@@ -341,9 +485,9 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
                                 BFSlabBuilderS.build_floor_finish(st_fin_carpet, rect, base + finish_top)
                         _:
                                 BFSlabBuilderS.build_floor_finish(st_fin_wood, rect, base + finish_top)
-                if p.generate_props:
+                if p.generate_props and not fast_regen:
                         var doors := BFPartitionerS.room_doors(room, walls)
-                        var placements := BFPropsS.layout_room(room.kind, rect, doors, base + finish_top, rng)
+                        var placements := BFPropsS.layout_room(room.kind, rect, doors, base + finish_top, rng, _arch_theme())
                         var pi := 0
                         for pl in placements:
                                 _build_prop(floor_node, prop_sts, pl, floor_i, room.id, base, style, pi)
@@ -363,8 +507,10 @@ func _build_interior(floor_node: Node3D, surfaces: Dictionary, fp: BFFootprint, 
 ## Polygon-aware stair planning: tries the preferred kind first, then
 ## fallbacks; each kind is tried un-rotated and 90deg-rotated over a grid of
 ## positions inside the interior polygon; refits (compresses treads / spiral
-## radius) before giving up. Returns {plan, cell, flip, hole} or {}.
-func _plan_stairs(fp: BFFootprint, inner: PackedVector2Array, interior_bounds: Rect2, fh: float, rng: RandomNumberGenerator) -> Dictionary:
+## radius) before giving up. The shaft must fit EVERY floor's inner polygon
+## (setback floors shrink). Returns {plan, cell, flip, hole} or {}.
+func _plan_stairs(floor_fps: Array, floor_inners: Array, interior_bounds: Rect2, fh: float, rng: RandomNumberGenerator) -> Dictionary:
+        var fp: BFFootprint = floor_fps[0]
         var order: Array = []
         match params.stair_kind:
                 BFParams.Stair.STRAIGHT:
@@ -383,14 +529,14 @@ func _plan_stairs(fp: BFFootprint, inner: PackedVector2Array, interior_bounds: R
                                 order = [BFStairBuilderS.StairKind.DOGLEG, BFStairBuilderS.StairKind.STRAIGHT, BFStairBuilderS.StairKind.SPIRAL]
         for kind in order:
                 var plan_d := BFStairBuilderS.plan(kind, fh, rng)
-                var fit := _fit_stair(plan_d, inner, interior_bounds)
+                var fit := _fit_stair(plan_d, floor_inners, interior_bounds)
                 if not fit.is_empty():
                         return fit
         print("[BuildingForge] footprint too small for any staircase; building will have no stairs")
         return {}
 
 
-func _fit_stair(plan_d: Dictionary, inner: PackedVector2Array, interior_bounds: Rect2) -> Dictionary:
+func _fit_stair(plan_d: Dictionary, floor_inners: Array, bounds: Rect2) -> Dictionary:
         var cell0: Rect2 = plan_d.cell
         var scales := [1.0, 0.9, 0.8, 0.7]
         for sc in scales:
@@ -401,7 +547,7 @@ func _fit_stair(plan_d: Dictionary, inner: PackedVector2Array, interior_bounds: 
                                 continue
                 for flip in [false, true]:
                         var sz: Vector2 = Vector2(pd.cell.size.y, pd.cell.size.x) if flip else pd.cell.size
-                        var world_cell := _stair_search_cell(sz, inner, interior_bounds)
+                        var world_cell := _stair_search_cell(sz, floor_inners, bounds)
                         if world_cell.get_area() > 0.0:
                                 var hole := BFStairBuilderS.hole_world(pd, world_cell, flip)
                                 return {"plan": pd, "cell": world_cell, "flip": flip, "hole": hole}
@@ -411,7 +557,7 @@ func _fit_stair(plan_d: Dictionary, inner: PackedVector2Array, interior_bounds: 
 ## Deterministic position search: corners -> center -> edge midpoints ->
 ## grid. Returns the first rect that fits the polygon (with clearance),
 ## else Rect2().
-func _stair_search_cell(sz: Vector2, inner: PackedVector2Array, bounds: Rect2) -> Rect2:
+func _stair_search_cell(sz: Vector2, floor_inners: Array, bounds: Rect2) -> Rect2:
         var pad := 0.3
         var c := bounds.get_center()
         var candidates: Array = [
@@ -438,7 +584,14 @@ func _stair_search_cell(sz: Vector2, inner: PackedVector2Array, bounds: Rect2) -
                         continue
                 if r.end.x > bounds.end.x + 0.01 or r.end.y > bounds.end.y + 0.01:
                         continue
-                if BFPartitionerS.rect_in_polygon(r, inner, 0.18):
+                # the shaft must clear EVERY floor's inner polygon (setbacks)
+                var fits_all := true
+                for fin in floor_inners:
+                        var inner_pts: PackedVector2Array = (fin as BFFootprint).points
+                        if not BFPartitionerS.rect_in_polygon(r, inner_pts, 0.18):
+                                fits_all = false
+                                break
+                if fits_all:
                         return r
         return Rect2()
 
@@ -453,6 +606,22 @@ func _prop_sts(surfaces: Dictionary, style: String) -> Dictionary:
 
 func _build_prop(floor_node: Node3D, prop_sts: Dictionary, pl: Dictionary, floor_i: int, room_id: int, base: float, style: String, prop_i: int) -> void:
     var id: String = pl.id
+    # user custom model replacement: instanced ONCE at generation (editor time,
+    # baked into the scene) - never generated at game runtime
+    if params.prop_scenes.has(id) and params.prop_scenes[id] is PackedScene:
+        var scene: PackedScene = params.prop_scenes[id]
+        if scene != null:
+            var wrap := Node3D.new()
+            wrap.name = "Prop_%s_f%02d_r%d_%d" % [id, floor_i, room_id, prop_i]
+            wrap.transform = Transform3D(Basis(Vector3.UP, pl.rot_y), pl.pos)
+            floor_node.add_child(wrap)
+            var inst := scene.instantiate()
+            wrap.add_child(inst)
+            for mi in wrap.find_children("*", "MeshInstance3D", true, false):
+                var pid := "cprop|%s|%d|%d|%s|%d" % [id, floor_i, room_id, wrap.name, (mi as MeshInstance3D).get_index()]
+                (mi as MeshInstance3D).set_meta("bf_part_id", pid)
+                (mi as MeshInstance3D).set_meta("bf_origin_transform", (mi as MeshInstance3D).transform)
+            return
     if not BFPropsS.has_prop(id):
         return
     var node := Node3D.new()
@@ -494,12 +663,17 @@ func _build_roof(roof_node: Node3D, fp: BFFootprint, base: float, rng: RandomNum
         var st_conc := BFMeshUtilS.new_st()
         var st_metal := BFMeshUtilS.new_st()
         var kind := p.roof_kind
-        if fp.is_circular and (kind == BFParams.Roof.GABLE or kind == BFParams.Roof.HIP):
+        if fp.is_circular and (kind == BFParams.Roof.GABLE or kind == BFParams.Roof.HIP
+                or kind == BFParams.Roof.MANSARD or kind == BFParams.Roof.GAMBREL or kind == BFParams.Roof.SHED):
                 kind = BFParams.Roof.CONE
-        var roof_params := {"overhang": p.roof_overhang, "pitch": p.roof_pitch, "tile": Vector2(0.5, 0.5), "parapet_h": 0.55}
+        var roof_params := {"overhang": p.roof_overhang, "pitch": p.roof_pitch, "pitch2": p.roof_pitch2,
+                "tile": Vector2(0.5, 0.5), "parapet_h": 0.55}
         BFRoofBuilderS.build_roof(kind, st_roof, st_trim, fp, base, roof_params)
+        # brick chimney on pitched roofs
+        if p.chimney and not fast_regen and kind != BFParams.Roof.FLAT and kind != BFParams.Roof.DOME and fp.area() > 14.0:
+                _build_chimney(st_conc, st_trim, fp, base, kind)
         # rooftop extras for flat roofs
-        if kind == BFParams.Roof.FLAT and p.rooftop_equipment and fp.area() > 30.0:
+        if kind == BFParams.Roof.FLAT and p.rooftop_equipment and not fast_regen and fp.area() > 30.0:
                 var inner := fp.inset(0.8)
                 if inner.size() >= 3:
                         var c := fp.center_xz()
@@ -515,11 +689,79 @@ func _build_roof(roof_node: Node3D, fp: BFFootprint, base: float, rng: RandomNum
                         var a: Vector2 = outer[i]
                         var b: Vector2 = outer[(i + 1) % n]
                         BFMeshUtilS.add_railing(st_metal, Vector3(a.x, rail_base, a.y), Vector3(b.x, rail_base, b.y), rail_base, 0.5, 0.04)
-        _commit_mesh(roof_node, st_roof, BFMatLib.get_material(_roof_mat(), style), "Roof_Surface")
-        _commit_mesh(roof_node, st_trim, BFMatLib.get_material("trim_white", style), "Roof_Trim")
-        _commit_mesh(roof_node, st_conc, BFMatLib.get_material("concrete", style), "Roof_Concrete")
-        _commit_mesh(roof_node, st_metal, BFMatLib.get_material("metal_dark", style), "Roof_Metal")
+        _commit_mesh(roof_node, st_roof, _resolve_mat(_roof_mat(), style, p.roof_tint), "Roof_Surface")
+        _commit_mesh(roof_node, st_trim, _resolve_mat("trim_white", style), "Roof_Trim")
+        _commit_mesh(roof_node, st_conc, _resolve_mat("concrete", style), "Roof_Concrete")
+        _commit_mesh(roof_node, st_metal, _resolve_mat("metal_dark", style), "Roof_Metal")
         return 0
+
+
+func _resolve_mat(mat_id: String, style: String, tint := Color.WHITE) -> Material:
+        return BFMatLib.get_tinted(mat_id, style, tint)
+
+
+## Brick chimney stack near the ridge/roof top (OBB-aligned).
+func _build_chimney(st_conc: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, base: float, kind: int) -> void:
+        var obb := BFRoofBuilderS.oriented_bbox(fp.points)
+        var center: Vector2 = obb[0]
+        var half: Vector2 = obb[1]
+        var ang: float = obb[2]
+        var ca := cos(ang)
+        var sa := sin(ang)
+        var xfrm := Transform3D(Basis(Vector3(ca, 0, -sa), Vector3.UP, Vector3(sa, 0, ca)), Vector3(center.x, 0, center.y))
+        var hz: float = half.y
+        var pitch := params.roof_pitch
+        var top_h := base
+        match kind:
+                BFParams.Roof.GABLE, BFParams.Roof.HIP:
+                        top_h = base + hz * pitch
+                BFParams.Roof.MANSARD:
+                        var s := minf(half.x, hz) * 0.38
+                        top_h = base + s * params.roof_pitch2 + (hz - s) * pitch
+                BFParams.Roof.GAMBREL:
+                        var kz := hz * 0.45
+                        top_h = base + (hz - kz) * params.roof_pitch2 + kz * pitch
+                BFParams.Roof.SHED:
+                        top_h = base + 2.0 * hz * pitch * 0.7
+                _:
+                        top_h = base + 1.0
+        var lx := half.x * 0.55
+        var lz := -hz * 0.25
+        var wpos := xfrm * Vector3(lx, 0, lz)
+        BFMeshUtilS.add_box(st_conc, Transform3D(Basis.IDENTITY, Vector3(wpos.x, (base - 0.1 + top_h + 0.7) * 0.5, wpos.z)), Vector3(0.55, top_h - base + 0.8, 0.55), Vector2(0.5, 0.5))
+        BFMeshUtilS.add_box(st_trim, Transform3D(Basis.IDENTITY, Vector3(wpos.x, top_h + 0.72, wpos.z)), Vector3(0.72, 0.1, 0.72), Vector2(0.5, 0.5))
+
+
+## Site items: concrete pad under the building + picket fence around the plot
+## with a gate opening at the entrance edge.
+func _build_site(site: Node3D, fp: BFFootprint) -> void:
+        var style := params.texture_style_dir
+        if params.terrain_pad:
+                var st_pad := BFMeshUtilS.new_st()
+                BFSlabBuilderS.build_slab(st_pad, fp.outset(0.55), -0.05, 0.08, Rect2(), Vector2(0.5, 0.5), false)
+                _commit_mesh(site, st_pad, _resolve_mat("concrete", style), "Pad")
+        if params.site_fence and not fp.is_circular:
+                var st_fence := BFMeshUtilS.new_st()
+                var ring := fp.outset(2.2)
+                var n := ring.size()
+                var entrance := BFFacadeS._pick_entrance_edge(fp, params)
+                for i in n:
+                        var a: Vector2 = ring[i]
+                        var b: Vector2 = ring[(i + 1) % n]
+                        if i == entrance:
+                                # gate: fence only at both sides of the door span
+                                var elen := (b - a).length()
+                                var dir := (b - a) / elen
+                                var gw := maxf(1.6, minf(2.2, elen * 0.3))
+                                var u0 := elen * 0.5 - gw * 0.5
+                                var u1 := elen * 0.5 + gw * 0.5
+                                if u0 > 0.3:
+                                        BFMeshUtilS.add_railing(st_fence, Vector3(a.x, 0, a.y), Vector3(a.x + dir.x * u0, 0, a.y + dir.y * u0), 0.08, 1.05, 0.05)
+                                if elen - u1 > 0.3:
+                                        BFMeshUtilS.add_railing(st_fence, Vector3(a.x + dir.x * u1, 0, a.y + dir.y * u1), Vector3(b.x, 0, b.y), 0.08, 1.05, 0.05)
+                        else:
+                                BFMeshUtilS.add_railing(st_fence, Vector3(a.x, 0, a.y), Vector3(b.x, 0, b.y), 0.08, 1.05, 0.05)
+                _commit_mesh(site, st_fence, _resolve_mat("metal_dark", style), "Fence")
 
 
 func _roof_mat() -> String:
@@ -560,7 +802,7 @@ func _to_wall_openings(openings: Dictionary) -> Dictionary:
         return out
 
 
-func _commit_surfaces(surfaces: Dictionary, floor_node: Node3D, m3d: MeshInstance3D, style: String, id_prefix: String) -> void:
+func _commit_surfaces(surfaces: Dictionary, floor_node: Node3D, m3d: MeshInstance3D, style: String, id_prefix: String, tints: Dictionary = {}) -> void:
         if m3d != null:
                 var mesh := ArrayMesh.new()
                 var idx := 0
@@ -569,7 +811,7 @@ func _commit_surfaces(surfaces: Dictionary, floor_node: Node3D, m3d: MeshInstanc
                         if m == null:
                                 continue
                         mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, m.surface_get_arrays(0))
-                        mesh.surface_set_material(idx, BFMatLib.get_material(mat_id, style))
+                        mesh.surface_set_material(idx, _resolve_mat(mat_id, style, tints.get(mat_id, Color.WHITE)))
                         idx += 1
                 if idx > 0:
                         m3d.mesh = mesh
@@ -583,7 +825,7 @@ func _commit_surfaces(surfaces: Dictionary, floor_node: Node3D, m3d: MeshInstanc
                 var mi := MeshInstance3D.new()
                 mi.name = "%s_%02d_%s" % [id_prefix, i, mat_id]
                 mi.mesh = m
-                mi.mesh.surface_set_material(0, BFMatLib.get_material(mat_id, style))
+                mi.mesh.surface_set_material(0, _resolve_mat(mat_id, style, tints.get(mat_id, Color.WHITE)))
                 floor_node.add_child(mi)
                 _set_part_meta(mi, "%s|%s|%d" % [id_prefix, mat_id, i])
                 i += 1
@@ -599,11 +841,6 @@ func _commit_mesh(parent: Node3D, st: SurfaceTool, mat: Material, name: String) 
         mi.mesh.surface_set_material(0, mat)
         parent.add_child(mi)
         _set_part_meta(mi, "roof|" + name)
-
-
-func _set_part_meta(mi: MeshInstance3D, id: String) -> void:
-        mi.set_meta("bf_part_id", id)
-        mi.set_meta("bf_origin_transform", mi.transform)
 
 
 func _collect_user_moves() -> void:
@@ -718,3 +955,90 @@ func finalize() -> Node3D:
                 (c as MeshInstance3D).transform = standalone.transform.affine_inverse() * (c as MeshInstance3D).transform
         standalone.transform = Transform3D()
         return standalone
+
+
+func _set_part_meta(mi: MeshInstance3D, id: String) -> void:
+        mi.set_meta("bf_part_id", id)
+        mi.set_meta("bf_origin_transform", mi.transform)
+
+
+## ------------------ editor tool API (gizmo / right-click menu) ----------
+
+## Adds a custom opening snapped to the nearest wall. `y` is the clicked
+## height in building-local space (picks the floor and, for windows, the
+## sill). Returns false when the point is not near any wall.
+func add_custom_opening_at(point: Vector2, kind: String, y := 1.0) -> bool:
+        var fp := params.footprint
+        if fp == null:
+                return false
+        var floor_i := clampi(int(floor(y / params.floor_height)), 0, params.floors - 1)
+        var sill := params.window_sill
+        if kind == "window" and params.floor_height > 2.0:
+                var local_y := y - float(floor_i) * params.floor_height
+                sill = clampf(local_y - params.window_height * 0.5, 0.4, maxf(0.4, params.floor_height - params.window_height - 0.3))
+        var before := params.custom_openings.size()
+        var ok := params.add_custom_opening(point, kind, fp, params.floor_height, floor_i, sill)
+        if ok:
+                params.emit_changed()
+        return ok or params.custom_openings.size() > before
+
+
+func remove_custom_openings_near(point: Vector2, radius := 0.9) -> int:
+        var removed := 0
+        var keep: Array[Dictionary] = []
+        for co in params.custom_openings:
+                var c: Dictionary = co
+                if (c.point as Vector2).distance_to(point) <= radius:
+                        removed += 1
+                else:
+                        keep.append(c)
+        if removed > 0:
+                params.custom_openings = keep
+                params.emit_changed()
+        return removed
+
+
+func clear_custom_openings() -> void:
+        if not params.custom_openings.is_empty():
+                params.custom_openings.clear()
+                params.emit_changed()
+
+
+func set_entrance_at(point: Vector2) -> void:
+        params.entrance_point = point
+        params.emit_changed()
+
+
+func insert_wall_point(point: Vector2) -> int:
+        var fp := params.footprint
+        if fp == null:
+                return -1
+        var idx := fp.insert_point_on_nearest_edge(point, 3.0)
+        if idx >= 0:
+                fp.emit_changed()
+        return idx
+
+
+func remove_wall_point(point: Vector2) -> bool:
+        var fp := params.footprint
+        if fp == null:
+                return false
+        var ok := fp.remove_point_near(point, 1.2)
+        if ok:
+                fp.emit_changed()
+        return ok
+
+
+## Interior theming by architecture (house-type interiors).
+func _arch_theme() -> String:
+        match params.architecture:
+                BFParams.ArchStyle.CLASSIC_HOUSE:
+                        return "classic"
+                BFParams.ArchStyle.MODERN:
+                        return "modern"
+                BFParams.ArchStyle.BRICK_APARTMENT:
+                        return "brick"
+                BFParams.ArchStyle.OFFICE_TOWER:
+                        return "office"
+                _:
+                        return "classic"
