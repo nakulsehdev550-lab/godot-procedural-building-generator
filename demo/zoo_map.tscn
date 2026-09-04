@@ -1,0 +1,482 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/building_forge/core/building_generator.gd" id="1_g3jvx"]
+[ext_resource type="Script" path="res://addons/building_forge/core/floor_override.gd" id="2_wtq66"]
+[ext_resource type="Script" path="res://addons/building_forge/core/footprint.gd" id="3_cdpmm"]
+[ext_resource type="Script" path="res://addons/building_forge/core/params.gd" id="4_rmoyh"]
+[ext_resource type="Script" path="res://demo/player.gd" id="5_7p2px"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_yxd2e"]
+sky_top_color = Color(0.35, 0.54, 0.8, 1)
+sky_horizon_color = Color(0.74, 0.81, 0.86, 1)
+ground_bottom_color = Color(0.22, 0.24, 0.25, 1)
+ground_horizon_color = Color(0.68, 0.74, 0.78, 1)
+
+[sub_resource type="Sky" id="Sky_7ofkk"]
+sky_material = SubResource("ProceduralSkyMaterial_yxd2e")
+
+[sub_resource type="Environment" id="Environment_s7ddv"]
+background_mode = 2
+sky = SubResource("Sky_7ofkk")
+ambient_light_source = 3
+ambient_light_energy = 0.85
+tonemap_mode = 3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rj2di"]
+albedo_color = Color(0.36, 0.42, 0.3, 1)
+roughness = 0.95
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_uf3mm"]
+material = SubResource("StandardMaterial3D_rj2di")
+size = Vector2(260, 200)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_c7878"]
+albedo_color = Color(0.42, 0.4, 0.37, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="BoxMesh_856m1"]
+material = SubResource("StandardMaterial3D_c7878")
+size = Vector3(250, 0.06, 6)
+
+[sub_resource type="BoxMesh" id="BoxMesh_2mltx"]
+material = SubResource("StandardMaterial3D_c7878")
+size = Vector3(6, 0.06, 190)
+
+[sub_resource type="Resource" id="Resource_wpcxw"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-5.5, -4.25, 5.5, -4.25, 5.5, 4.25, -5.5, 4.25)
+
+[sub_resource type="Resource" id="Resource_oxeoo"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_wpcxw")
+chimney = true
+terrain_pad = true
+stair_kind = 1
+seed = 42
+
+[sub_resource type="Resource" id="Resource_nbf50"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-4.5, -3.5, 0.45, -3.5, 0.45, 0.35, 4.5, 0.35, 4.5, 3.5, -4.5, 3.5)
+
+[sub_resource type="Resource" id="Resource_nvth2"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_nbf50")
+floors = 1
+facade_material = "stone"
+roof_kind = 2
+chimney = true
+seed = 7
+
+[sub_resource type="Resource" id="Resource_wqnu8"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-4.25, -3.25, 4.25, -3.25, 4.25, 3.25, -4.25, 3.25)
+
+[sub_resource type="Resource" id="Resource_d33fm"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_wqnu8")
+floors = 1
+roof_kind = 6
+roof_pitch = 0.5
+roof_pitch2 = 1.6
+chimney = true
+site_fence = true
+terrain_pad = true
+max_room_area = 16.0
+seed = 64
+
+[sub_resource type="Resource" id="Resource_xbspg"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-7, -5.5, 0.7, -5.5, 0.7, 0.55, 7, 0.55, 7, 5.5, -7, 5.5)
+
+[sub_resource type="Resource" id="Resource_hapx6"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_xbspg")
+architecture = 2
+facade_material = "facade_panel"
+roof_kind = 0
+window_style = 1
+stair_kind = 2
+ground_balcony = true
+seed = 11
+
+[sub_resource type="Resource" id="Resource_gkqox"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-9.5, -7, 9.5, -7, 9.5, 7, 2.85, 7, 2.85, 2.1, -2.85, 2.1, -2.85, 7, -9.5, 7)
+
+[sub_resource type="Resource" id="Resource_nskw7"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_gkqox")
+floors = 3
+roof_kind = 5
+roof_pitch = 0.35
+roof_pitch2 = 1.7
+chimney = true
+seed = 21
+
+[sub_resource type="Resource" id="Resource_fuy67"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-9, -6.5, 9, -6.5, 9, 6.5, -9, 6.5)
+
+[sub_resource type="Resource" id="Resource_okm24"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_fuy67")
+floors = 5
+architecture = 1
+facade_material = "brick_red"
+roof_kind = 0
+stair_kind = 2
+seed = 7
+
+[sub_resource type="Resource" id="Resource_7bykk"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-3.25, -5.5, 3.25, -5.5, 3.25, 5.5, -3.25, 5.5)
+
+[sub_resource type="Resource" id="Resource_g46xu"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_7bykk")
+floors = 3
+facade_material = "brick_gray"
+roof_kind = 7
+window_style = 2
+seed = 23
+
+[sub_resource type="Resource" id="Resource_7ue0m"]
+script = ExtResource("2_wtq66")
+facade_material = "facade_panel"
+window_style = 1
+
+[sub_resource type="Resource" id="Resource_7v4iq"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-7, -5.5, 7, -5.5, 7, 5.5, -7, 5.5)
+
+[sub_resource type="Resource" id="Resource_qswt7"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_7v4iq")
+floors = 5
+architecture = 1
+facade_material = "brick_red"
+roof_kind = 0
+stair_kind = 2
+floor_overrides = Array[ExtResource("2_wtq66")]([SubResource("Resource_7ue0m")])
+seed = 13
+
+[sub_resource type="Resource" id="Resource_yx4yh"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(8, 0, 7.846282, 1.5607226, 7.391036, 3.0614674, 6.651757, 4.444562, 5.656854, 5.656854, 4.444562, 6.651757, 3.0614674, 7.391036, 1.5607226, 7.846282, 4.8985874e-16, 8, -1.5607226, 7.846282, -3.0614674, 7.391036, -4.444562, 6.651757, -5.656854, 5.656854, -6.651757, 4.444562, -7.391036, 3.0614674, -7.846282, 1.5607226, -8, 9.797175e-16, -7.846282, -1.5607226, -7.391036, -3.0614674, -6.651757, -4.444562, -5.656854, -5.656854, -4.444562, -6.651757, -3.0614674, -7.391036, -1.5607226, -7.846282, -1.4695761e-15, -8, 1.5607226, -7.846282, 3.0614674, -7.391036, 4.444562, -6.651757, 5.656854, -5.656854, 6.651757, -4.444562, 7.391036, -3.0614674, 7.846282, -1.5607226)
+is_circular = true
+
+[sub_resource type="Resource" id="Resource_s2w33"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_yx4yh")
+floors = 6
+architecture = 2
+roof_kind = 3
+window_style = 1
+stair_kind = 3
+seed = 3
+
+[sub_resource type="Resource" id="Resource_ts66t"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-10, -7.5, 10, -7.5, 10, 7.5, 3, 7.5, 3, 2.25, -3, 2.25, -3, 7.5, -10, 7.5)
+
+[sub_resource type="Resource" id="Resource_qe1cp"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_ts66t")
+floors = 8
+architecture = 3
+facade_material = "concrete"
+roof_kind = 0
+window_style = 1
+window_spacing = 3.4
+seed = 5
+
+[sub_resource type="Resource" id="Resource_jb6du"]
+script = ExtResource("2_wtq66")
+outset = -1.2
+
+[sub_resource type="Resource" id="Resource_yatie"]
+script = ExtResource("2_wtq66")
+outset = -2.2
+
+[sub_resource type="Resource" id="Resource_2o7km"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-9, -7, 9, -7, 9, 7, -9, 7)
+
+[sub_resource type="Resource" id="Resource_tefb7"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_2o7km")
+floors = 10
+architecture = 3
+facade_material = "concrete"
+roof_kind = 0
+window_style = 1
+window_spacing = 3.4
+stair_kind = 3
+floor_overrides = Array[ExtResource("2_wtq66")]([null, null, null, null, SubResource("Resource_jb6du"), SubResource("Resource_jb6du"), SubResource("Resource_jb6du"), SubResource("Resource_jb6du"), SubResource("Resource_yatie"), SubResource("Resource_yatie")])
+seed = 17
+
+[sub_resource type="Resource" id="Resource_blkmg"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-1.3, -5, 1.3, -5, 1.3, -4, 6.5, -4, 6.5, 5, -6.5, 5)
+
+[sub_resource type="Resource" id="Resource_nl07p"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_blkmg")
+roof_kind = 2
+site_fence = true
+seed = 77
+
+[sub_resource type="Resource" id="Resource_iaoup"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(6.5, 0, 6.4526076, 0.5424151, 6.311122, 1.0769205, 6.0776057, 1.595722, 5.755464, 2.0912542, 5.3493953, 2.5562913, 4.8653197, 2.984052, 4.3102975, 3.3682983, 3.692421, 3.7034273, 3.0207007, 3.9845521, 2.3049319, 4.207573, 1.5555518, 4.3692384, 0.7834884, 4.46719, -1.0452797e-15, 4.5, -0.7834884, 4.46719, -1.5555518, 4.3692384, -2.3049319, 4.207573, -3.0207007, 3.9845521, -3.692421, 3.7034273, -4.3102975, 3.3682983, -4.8653197, 2.984052, -5.3493953, 2.5562913, -5.755464, 2.0912542, -6.0776057, 1.595722, -6.311122, 1.0769205, -6.4526076, 0.5424151, -6.5, -1.4473104e-15, -6.4526076, -0.5424151, -6.311122, -1.0769205, -6.0776057, -1.595722, -5.755464, -2.0912542, -5.3493953, -2.5562913, -4.8653197, -2.984052, -4.3102975, -3.3682983, -3.692421, -3.7034273, -3.0207007, -3.9845521, -2.3049319, -4.207573, -1.5555518, -4.3692384, -0.7834884, -4.46719, -1.1940306e-15, -4.5, 0.7834884, -4.46719, 1.5555518, -4.3692384, 2.3049319, -4.207573, 3.0207007, -3.9845521, 3.692421, -3.7034273, 4.3102975, -3.3682983, 4.8653197, -2.984052, 5.3493953, -2.5562913, 5.755464, -2.0912542, 6.0776057, -1.595722, 6.311122, -1.0769205, 6.4526076, -0.5424151)
+is_circular = true
+
+[sub_resource type="Resource" id="Resource_rpemw"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_iaoup")
+architecture = 2
+roof_kind = 4
+window_style = 1
+stair_kind = 3
+seed = 15
+
+[sub_resource type="Resource" id="Resource_jon5g"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-7, -5.5, 7, -5.5, 7, 5.5, -7, 5.5)
+
+[sub_resource type="Resource" id="Resource_e7sfo"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_jon5g")
+floors = 3
+architecture = 1
+facade_material = "brick_red"
+roof_kind = 0
+max_room_area = 18.0
+stair_kind = 2
+seed = 31
+
+[sub_resource type="Resource" id="Resource_s3y31"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-8, -6, 8, -6, 8, 6, -8, 6)
+
+[sub_resource type="Resource" id="Resource_i55bn"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_s3y31")
+floors = 10
+architecture = 2
+facade_material = "facade_panel"
+roof_kind = 0
+window_style = 1
+stair_kind = 2
+balcony_every_n_floors = 2
+seed = 99
+
+[sub_resource type="Resource" id="Resource_gbgyx"]
+script = ExtResource("3_cdpmm")
+points = PackedVector2Array(-6, -4, 3, -4, 6, -1.5, 6, 4, -2, 4, -6, 1.5)
+
+[sub_resource type="Resource" id="Resource_qedgq"]
+script = ExtResource("4_rmoyh")
+footprint = SubResource("Resource_gbgyx")
+roof_kind = 0
+custom_openings = Array[Dictionary]([{
+"floor": 0,
+"height": 1.6,
+"kind": "window",
+"point": Vector2(3, -4),
+"sill": 0.7,
+"width": 2.2
+}, {
+"floor": 0,
+"height": 2.1,
+"kind": "door",
+"point": Vector2(-6, -1.5),
+"sill": 0.0,
+"width": 1.6
+}])
+seed = 55
+
+[node name="ZooMap" type="Node3D" unique_id=1970983577]
+
+[node name="@WorldEnvironment@2" type="WorldEnvironment" parent="." unique_id=1211702393]
+environment = SubResource("Environment_s7ddv")
+
+[node name="@DirectionalLight3D@3" type="DirectionalLight3D" parent="." unique_id=1780767504]
+transform = Transform3D(0.7880108, 0.4428698, -0.42767444, 0, 0.6946584, 0.7193398, 0.6156615, -0.5668475, 0.5473983, 0, 0, 0)
+light_energy = 1.1
+shadow_enabled = true
+
+[node name="Ground" type="MeshInstance3D" parent="." unique_id=1748322174]
+mesh = SubResource("PlaneMesh_uf3mm")
+
+[node name="Path_3" type="MeshInstance3D" parent="." unique_id=691671538]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)
+mesh = SubResource("BoxMesh_856m1")
+
+[node name="Path_4" type="MeshInstance3D" parent="." unique_id=64085675]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)
+mesh = SubResource("BoxMesh_2mltx")
+
+[node name="suburban_house" type="Node3D" parent="." unique_id=1004113176]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, 0, -70)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_oxeoo")
+stats = "floors=2  tris=7_622  parts=61  546.0 ms"
+
+[node name="Generated" type="Node3D" parent="suburban_house" unique_id=818208852]
+
+[node name="Collision" type="StaticBody3D" parent="suburban_house" unique_id=1433231782]
+
+[node name="stone_cottage" type="Node3D" parent="." unique_id=251557525]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0, -70)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_nvth2")
+stats = "floors=1  tris=3_884  parts=30  11.0 ms"
+
+[node name="Generated" type="Node3D" parent="stone_cottage" unique_id=1631359083]
+
+[node name="Collision" type="StaticBody3D" parent="stone_cottage" unique_id=1779071374]
+
+[node name="village_house" type="Node3D" parent="." unique_id=723626419]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -70)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_d33fm")
+stats = "floors=1  tris=3_246  parts=27  23.5 ms"
+
+[node name="Generated" type="Node3D" parent="village_house" unique_id=561278445]
+
+[node name="Collision" type="StaticBody3D" parent="village_house" unique_id=1228754361]
+
+[node name="modern_villa" type="Node3D" parent="." unique_id=1640243254]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 90, 0, -70)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_hapx6")
+stats = "floors=2  tris=11_260  parts=77  43.6 ms"
+
+[node name="Generated" type="Node3D" parent="modern_villa" unique_id=221881156]
+
+[node name="Collision" type="StaticBody3D" parent="modern_villa" unique_id=67173610]
+
+[node name="mansion" type="Node3D" parent="." unique_id=1704107257]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, 0, -24)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_nskw7")
+stats = "floors=3  tris=30_066  parts=208  84.0 ms"
+
+[node name="Generated" type="Node3D" parent="mansion" unique_id=1743201471]
+
+[node name="Collision" type="StaticBody3D" parent="mansion" unique_id=195570910]
+
+[node name="brick_apartment" type="Node3D" parent="." unique_id=1253908725]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0, -24)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_okm24")
+stats = "floors=5  tris=47_640  parts=345  132.1 ms"
+
+[node name="Generated" type="Node3D" parent="brick_apartment" unique_id=636851733]
+
+[node name="Collision" type="StaticBody3D" parent="brick_apartment" unique_id=430427629]
+
+[node name="townhouse_tall" type="Node3D" parent="." unique_id=1090982517]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -24)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_g46xu")
+stats = "floors=3  tris=9_676  parts=62  50.9 ms"
+
+[node name="Generated" type="Node3D" parent="townhouse_tall" unique_id=1471361987]
+
+[node name="Collision" type="StaticBody3D" parent="townhouse_tall" unique_id=850027557]
+
+[node name="shop_apartments" type="Node3D" parent="." unique_id=873118949]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 90, 0, -24)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_qswt7")
+stats = "floors=5  tris=31_086  parts=223  85.5 ms"
+
+[node name="Generated" type="Node3D" parent="shop_apartments" unique_id=925455435]
+
+[node name="Collision" type="StaticBody3D" parent="shop_apartments" unique_id=1708889017]
+
+[node name="round_tower" type="Node3D" parent="." unique_id=1597004091]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, 0, 24)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_s2w33")
+stats = "floors=6  tris=82_194  parts=375  285.8 ms"
+
+[node name="Generated" type="Node3D" parent="round_tower" unique_id=1861781165]
+
+[node name="Collision" type="StaticBody3D" parent="round_tower" unique_id=1422181409]
+
+[node name="office_tower_u" type="Node3D" parent="." unique_id=1087734339]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0, 24)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_qe1cp")
+stats = "floors=8  tris=97_994  parts=516  266.9 ms"
+
+[node name="Generated" type="Node3D" parent="office_tower_u" unique_id=1770333286]
+
+[node name="Collision" type="StaticBody3D" parent="office_tower_u" unique_id=2127581927]
+
+[node name="setback_tower" type="Node3D" parent="." unique_id=818222151]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, 24)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_tefb7")
+stats = "floors=10  tris=96_982  parts=557  261.8 ms"
+
+[node name="Generated" type="Node3D" parent="setback_tower" unique_id=373526919]
+
+[node name="Collision" type="StaticBody3D" parent="setback_tower" unique_id=1550129729]
+
+[node name="tshape_family" type="Node3D" parent="." unique_id=1461633567]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 90, 0, 24)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_nl07p")
+stats = "floors=2  tris=10_074  parts=66  28.8 ms"
+
+[node name="Generated" type="Node3D" parent="tshape_family" unique_id=1016960903]
+
+[node name="Collision" type="StaticBody3D" parent="tshape_family" unique_id=2094291050]
+
+[node name="oval_villa" type="Node3D" parent="." unique_id=1359728121]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, 0, 70)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_rpemw")
+stats = "floors=2  tris=6_946  parts=43  21.8 ms"
+
+[node name="Generated" type="Node3D" parent="oval_villa" unique_id=463089540]
+
+[node name="Collision" type="StaticBody3D" parent="oval_villa" unique_id=238837095]
+
+[node name="apartment_dogleg" type="Node3D" parent="." unique_id=102012073]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0, 70)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_e7sfo")
+stats = "floors=3  tris=19_692  parts=139  53.7 ms"
+
+[node name="Generated" type="Node3D" parent="apartment_dogleg" unique_id=515935452]
+
+[node name="Collision" type="StaticBody3D" parent="apartment_dogleg" unique_id=1978371500]
+
+[node name="penthouse_tower" type="Node3D" parent="." unique_id=1473763368]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, 70)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_i55bn")
+stats = "floors=10  tris=67_842  parts=551  195.3 ms"
+
+[node name="Generated" type="Node3D" parent="penthouse_tower" unique_id=1823285950]
+
+[node name="Collision" type="StaticBody3D" parent="penthouse_tower" unique_id=1425045223]
+
+[node name="freeform_house" type="Node3D" parent="." unique_id=1355013023]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 90, 0, 70)
+script = ExtResource("1_g3jvx")
+params = SubResource("Resource_qedgq")
+stats = "floors=2  tris=10_392  parts=66  29.5 ms"
+
+[node name="Generated" type="Node3D" parent="freeform_house" unique_id=1489075499]
+
+[node name="Collision" type="StaticBody3D" parent="freeform_house" unique_id=1498971378]
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1281493743]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -115, 0.2, 0)
+script = ExtResource("5_7p2px")
