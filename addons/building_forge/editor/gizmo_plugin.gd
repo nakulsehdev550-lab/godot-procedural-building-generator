@@ -57,8 +57,8 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
                 lines.append(Vector3(a.x, 0.0, a.y))
                 lines.append(Vector3(a.x, top, a.y))
         # ridge line hint (pitched roofs)
-        var ridge := _ridge_hint(b)
-        if ridge != Vector3.INF:
+        var ridge = _ridge_hint(b)
+        if ridge is Array:
                 lines.append(ridge[0])
                 lines.append(ridge[1])
         gizmo.add_lines(lines, get_material("outline", gizmo), false)
@@ -79,8 +79,8 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
         gizmo.add_handles(handles, get_material("handles", gizmo), PackedInt32Array(), false, false)
 
 
-## [start, end] world-space ridge line for the gizmo, or Vector3.INF.
-func _ridge_hint(b: ProceduralBuildingS) -> Array:
+## [start, end] world-space ridge line for the gizmo, or Vector3.INF when none.
+func _ridge_hint(b: ProceduralBuildingS) -> Variant:
         var fp := b.params.footprint
         var kind := b.params.roof_kind
         if fp.is_circular or not (kind in [BFParams.Roof.GABLE, BFParams.Roof.HIP]):
@@ -98,8 +98,8 @@ func _ridge_hint(b: ProceduralBuildingS) -> Array:
 
 
 func _pitch_handle_pos(b: ProceduralBuildingS) -> Vector3:
-        var ridge := _ridge_hint(b)
-        if ridge == Vector3.INF:
+        var ridge = _ridge_hint(b)
+        if not (ridge is Array):
                 # cone roofs get an apex handle
                 var fp := b.params.footprint
                 if fp.is_circular and b.params.roof_kind == BFParams.Roof.CONE:
