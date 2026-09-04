@@ -66,3 +66,34 @@ Work Log:
 - All work pushed incrementally; final renders in renders/zoo/
 Stage Summary:
 - v1.1.0 shipped. Todo: user should revoke the PAT token when done.
+
+---
+Task ID: 1
+Agent: research
+Task: Research procedural building tools for feature inspiration
+
+Work Log:
+- Read worklog + README to ground research in current v1.1.0 feature set (drawn footprints, 5 facades, 5 roofs, BSP rooms, 24 props, baked PBR)
+- Ran 15+ targeted web searches (Blender Building Tools/Archipack/Buildify/PBG2, Unity BuildR 2/3, Houdini Labs Building Generator + Utility, CityEngine CGA, Townscaper, SketchUp/Medeek/Revit wall UX, Godot Asset Library, floor-plan algorithms)
+- Fetched + extracted full text of: Archipack features page, Archipack manipulate-mode manual, SideFX Labs Building Generator 4.0 + Utility 2.0 docs, ranjian0 Building Tools wiki (Roof/Multigroup/Floorplan/Window), 80.lv Houdini building generator interview, Townscaper GDC case study, Medeek Wall (SketchUp) docs, BuildR 2 forum thread, CGA component-split docs
+- Mapped findings to BuildingForge's Geometry3D/ArrayMesh architecture and rated each idea by implementation difficulty
+- Saved raw results in /tmp/bf_research/ (19 JSON files)
+
+Stage Summary:
+- Biggest steals: (1) face-driven incremental building (Blender Building Tools), (2) Archipack-style live manipulator handles with snap/constraints/numeric entry, (3) Houdini Labs "Expanded Form" facade pattern grammar with per-floor overrides + corner modules, (4) BuildR-style overhanging floors/setbacks, (5) corridor+core floor plans for towers (BuildR 3 / TU Delft A* corridor paper)
+- Godot Asset Library has NO competing full architecture generator (only grid-placement/dungeon tools) — green field
+- Key pitfalls: single-style tunnel vision (THE FINALS postmortem), fragile hidden helper state (Archipack collections), UV blowup without per-part material indices + UV randomization, regeneration vs. hand-edits conflict (bake-out option needed)
+- Full ranked list of 18 feature ideas with difficulty ratings delivered in final report
+
+---
+Task ID: 12
+Agent: main
+Task: v1.2 — interactive editing suite, FPS zoo map, custom models, research-driven features
+
+Work Log:
+- Sandbox wiped again; restored from GitHub (clone) + re-downloaded Godot 4.7.1; baseline green (geo/e2e 28/28/connectivity 76/76)
+- Research agent reviewed Blender Building Tools/Archipack, BuildR, Houdini Labs BG, CityEngine CGA, Townscaper -> top-18 feature list (per-floor overrides, custom openings, prop swapping, more roofs, bands, chimney, fence, presets)
+- Plan: M1 glass transparency/z-fight fix; M2 parametric features; M3 gizmo v2 + right-click wall editing; M4 FPS zoo map; M5 tests+visual QA; M6 release v1.2.0 (code-only)
+
+Stage Summary:
+- In progress
