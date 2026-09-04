@@ -219,6 +219,15 @@ static func _poly_area_signed(poly: PackedVector2Array) -> float:
 
 ## --- Geometry ops --------------------------------------------------------
 
+## Godot 4.7: Geometry2D.offset_polygon returns an ARRAY OF POLYGONS
+## (an offset can split a polygon into several), and positive delta GROWS
+## the polygon. The old code compared res.size() (polygon count!) against 3
+## and read it as one polygon - inset/outset were silent no-ops for the
+## plugin's entire life, which also made slab ledges exactly coplanar with
+## walls (the systemic z-fighting). Fixed: unwrap the polygons, correct
+## signs (inset passes -delta, outset passes +delta), pick the LARGEST
+## result piece, reject inverted pieces.
+
 ## Shrinks the polygon inward by `delta` meters with miter joins.
 ## Falls back to progressively smaller deltas for thin footprints.
 func inset(delta: float) -> PackedVector2Array:
@@ -226,9 +235,15 @@ func inset(delta: float) -> PackedVector2Array:
                 return points.duplicate()
         var try_deltas := [delta, delta * 0.7, delta * 0.45, delta * 0.25]
         for d in try_deltas:
-                var res := Geometry2D.offset_polygon(points, d, Geometry2D.JOIN_MITER)
-                if res.size() >= 3 and _poly_area_signed(res) > 0.0:
-                        return res
+                var best := PackedVector2Array()
+                var best_area := 0.0
+                for poly in Geometry2D.offset_polygon(points, -d, Geometry2D.JOIN_MITER):
+                        var pa := _poly_area_signed(poly)
+                        if poly.size() >= 3 and pa > best_area:
+                                best = poly
+                                best_area = pa
+                if best_area > 0.0:
+                        return best
         return points.duplicate()
 
 
@@ -236,9 +251,15 @@ func inset(delta: float) -> PackedVector2Array:
 func outset(delta: float) -> PackedVector2Array:
         if delta <= 0.001:
                 return points.duplicate()
-        var res := Geometry2D.offset_polygon(points, -delta, Geometry2D.JOIN_MITER)
-        if res.size() >= 3:
-                return res
+        var best := PackedVector2Array()
+        var best_area := 0.0
+        for poly in Geometry2D.offset_polygon(points, delta, Geometry2D.JOIN_MITER):
+                var pa := _poly_area_signed(poly)
+                if poly.size() >= 3 and pa > best_area:
+                        best = poly
+                        best_area = pa
+        if best_area > 0.0:
+                return best
         return points.duplicate()
 
 
