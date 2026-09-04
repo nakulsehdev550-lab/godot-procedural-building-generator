@@ -17,6 +17,11 @@ var _drag_start := Vector2.ZERO
 var _drag_active := false
 var _drag_cur := Vector2.ZERO
 var _undo: EditorUndoRedoManager = null
+# right-click wall menu state
+var _ctx_menu: PopupMenu = null
+var _rmb_press_pos := Vector2.ZERO
+var _rmb_moved := false
+var _ctx_hit := {}
 
 
 func _enter_tree() -> void:
@@ -48,9 +53,11 @@ func _edit(object: Object) -> void:
 
 
 ## Forward viewport input while draw mode is on and a building is selected.
+## Outside draw mode, a right-CLICK on a wall opens the wall editing menu
+## (a right-drag still orbits/free-looks - only motionless clicks pop the menu).
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
         if not _draw_mode:
-                return EditorPlugin.AFTER_GUI_INPUT_PASS
+                return _ctx_input(viewport_camera, event)
         var b := _selected_building()
         if b == null:
                 return EditorPlugin.AFTER_GUI_INPUT_PASS
@@ -91,6 +98,179 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
                         update_overlays()
                         return EditorPlugin.AFTER_GUI_INPUT_STOP
         return EditorPlugin.AFTER_GUI_INPUT_PASS
+
+
+## --- right-click wall editing menu -----------------------------------------
+
+func _ctx_input(cam: Camera3D, event: InputEvent) -> int:
+        var b := _selected_building()
+        if b == null:
+                return EditorPlugin.AFTER_GUI_INPUT_PASS
+        if event is InputEventMouseButton:
+                var mb := event as InputEventMouseButton
+                if mb.button_index == MOUSE_BUTTON_RIGHT:
+                        if mb.pressed:
+                                _rmb_press_pos = mb.position
+                                _rmb_moved = false
+                        else:
+                                # a click (not a free-look drag): open the menu
+                                if not _rmb_moved and (mb.position - _rmb_press_pos).length() < 6.0:
+                                        _open_ctx_menu(b, cam, mb.position)
+                                        return EditorPlugin.AFTER_GUI_INPUT_STOP
+        elif event is InputEventMouseMotion:
+                if (event as InputEventMouseMotion).button_mask & MOUSE_BUTTON_MASK_RIGHT:
+                        _rmb_moved = true
+        return EditorPlugin.AFTER_GUI_INPUT_PASS
+
+
+func _open_ctx_menu(b: ProceduralBuilding, cam: Camera3D, screen_pos: Vector2) -> void:
+        _ctx_hit = _wall_hit(cam, screen_pos, b)
+        if _ctx_menu == null:
+                _ctx_menu = PopupMenu.new()
+                EditorInterface.get_base_control().add_child(_ctx_menu)
+                _ctx_menu.id_pressed.connect(_on_ctx_action)
+        var menu := _ctx_menu
+        menu.clear()
+        menu.add_item("Add Bend Point Here", 0)
+        menu.add_item("Delete Nearest Corner", 1)
+        menu.add_separator()
+        menu.add_item("Cut Window in Wall", 2)
+        menu.add_item("Cut Door in Wall", 3)
+        menu.add_item("Remove Openings Here", 4)
+        menu.add_separator()
+        menu.add_item("Set Entrance Here", 5)
+        menu.add_item("Clear All Custom Openings", 6)
+        menu.add_separator()
+        menu.add_item("Finalize (Bake Static)", 7)
+        menu.popup(Rect2i(Vector2i(DisplayServer.mouse_get_position()), Vector2i(240, 0)))
+
+
+func _on_ctx_action(id: int) -> void:
+        var b := _selected_building()
+        if b == null:
+                return
+        var hit: Dictionary = _ctx_hit
+        match id:
+                0:  # add bend point
+                        var at: Vector2 = hit.get("point", hit.get("ground", Vector2.ZERO))
+                        _edit_footprint(b, "BuildingForge: Add Bend Point", func(): b.insert_wall_point(at))
+                1:  # delete nearest corner
+                        var at2: Vector2 = hit.get("point", hit.get("ground", Vector2.ZERO))
+                        _edit_footprint(b, "BuildingForge: Delete Corner", func(): b.remove_wall_point(at2))
+                2:  # cut window
+                        var at3: Vector2 = hit.get("point", hit.get("ground", Vector2.ZERO))
+                        var y: float = hit.get("y", 1.2)
+                        _edit_params(b, "BuildingForge: Cut Window", func(): b.add_custom_opening_at(at3, "window", y))
+                3:  # cut door
+                        var at4: Vector2 = hit.get("point", hit.get("ground", Vector2.ZERO))
+                        var y4: float = hit.get("y", 1.2)
+                        _edit_params(b, "BuildingForge: Cut Door", func(): b.add_custom_opening_at(at4, "door", y4))
+                4:  # remove openings near click
+                        var at5: Vector2 = hit.get("point", hit.get("ground", Vector2.ZERO))
+                        _edit_params(b, "BuildingForge: Remove Openings", func(): b.remove_custom_openings_near(at5))
+                5:  # set entrance
+                        var at6: Vector2 = hit.get("point", hit.get("ground", Vector2.ZERO))
+                        _edit_params(b, "BuildingForge: Set Entrance", func(): b.set_entrance_at(at6))
+                6:  # clear custom openings
+                        _edit_params(b, "BuildingForge: Clear Custom Openings", func(): b.clear_custom_openings())
+                7:  # finalize
+                        finalize_selected()
+
+
+## Runs a footprint mutation and records it in the undo system.
+func _edit_footprint(b: ProceduralBuilding, label: String, fn: Callable) -> void:
+        var before: PackedVector2Array = b.params.footprint.points
+        fn.call()
+        var after: PackedVector2Array = b.params.footprint.points
+        if before == after:
+                return
+        _undo.create_action(label)
+        _undo.add_do_property(b.params.footprint, "points", after)
+        _undo.add_undo_property(b.params.footprint, "points", before)
+        _undo.add_do_method(b.params, "emit_changed")
+        _undo.add_undo_method(b.params, "emit_changed")
+        _undo.commit_action()
+
+
+## Runs a params mutation (custom openings / entrance) with undo.
+func _edit_params(b: ProceduralBuilding, label: String, fn: Callable) -> void:
+        var before_ops: Array = b.params.custom_openings.duplicate(true)
+        var before_ent: Vector2 = b.params.entrance_point
+        fn.call()
+        _undo.create_action(label)
+        _undo.add_do_property(b.params, "custom_openings", b.params.custom_openings.duplicate(true))
+        _undo.add_undo_property(b.params, "custom_openings", before_ops)
+        _undo.add_do_property(b.params, "entrance_point", b.params.entrance_point)
+        _undo.add_undo_property(b.params, "entrance_point", before_ent)
+        _undo.add_do_method(b.params, "emit_changed")
+        _undo.add_undo_method(b.params, "emit_changed")
+        _undo.commit_action()
+
+
+func finalize_selected() -> void:
+        var b := _selected_building()
+        if b == null:
+                print("[BuildingForge] select a ProceduralBuilding first")
+                return
+        var scene_root := EditorInterface.get_edited_scene_root()
+        var standalone := b.finalize()
+        if standalone == null:
+                return
+        _undo.create_action("BuildingForge: Finalize Building")
+        _undo.add_do_method(scene_root, "add_child", standalone)
+        _undo.add_do_method(standalone, "set_owner", scene_root)
+        _undo.add_undo_method(scene_root, "remove_child", standalone)
+        _undo.add_undo_reference(standalone)
+        _undo.commit_action()
+        print("[BuildingForge] finalized to static geometry: ", standalone.name)
+
+
+## Ray-casts the click against every footprint edge's VERTICAL wall plane.
+## Returns {point: Vector2 (XZ on the wall), y: height, ground: Vector2} -
+## point/y empty when no wall was hit; ground is the y=0 plane hit fallback.
+func _wall_hit(cam: Camera3D, screen_pos: Vector2, b: ProceduralBuilding) -> Dictionary:
+        var origin := cam.project_ray_origin(screen_pos)
+        var dir := cam.project_ray_normal(screen_pos)
+        var fp := b.params.footprint
+        var ground := Vector2.ZERO
+        if absf(dir.y) > 0.0001:
+                var t0 := (b.global_position.y - origin.y) / dir.y
+                var g := b.to_local(origin + dir * t0)
+                ground = Vector2(g.x, g.z)
+        if fp == null or fp.points.size() < 3:
+                return {"ground": ground}
+        var n := fp.points.size()
+        var best_t := INF
+        var best := {}
+        for i in n:
+                var a := fp.points[i]
+                var bb := fp.points[(i + 1) % n]
+                var ab := bb - a
+                var elen := ab.length()
+                if elen < 0.01:
+                        continue
+                var d := ab / elen
+                var n_out := Vector3(d.y, 0.0, -d.x)  # outward horizontal normal
+                var pa := b.to_global(Vector3(a.x, 0.0, a.y))
+                var denom := dir.dot(n_out)
+                if absf(denom) < 0.0001:
+                        continue
+                var t := (pa - origin).dot(n_out) / denom
+                if t < 0.01:
+                        continue
+                var hit := origin + dir * t
+                var local := b.to_local(hit)
+                var u := (Vector2(local.x, local.z) - a).dot(d)
+                if u < -0.05 or u > elen + 0.05:
+                        continue
+                var top_h := float(b.params.floors) * b.params.floor_height + 1.0
+                if local.y < -0.1 or local.y > top_h:
+                        continue
+                if t < best_t:
+                        best_t = t
+                        best = {"point": a + d * clampf(u, 0.0, elen), "y": maxf(0.0, local.y)}
+        best["ground"] = ground
+        return best
 
 
 func _forward_3d_draw_over_viewport(viewport_control: Control) -> void:
@@ -277,6 +457,56 @@ func apply_preset(preset_name: String) -> void:
                         p.roof_kind = BFParams.Roof.CONE
                         p.window_style = BFParams.WindowStyle.CURTAIN
                         p.stair_kind = BFParams.Stair.SPIRAL,
+                "village_house": func():
+                        p.footprint = BFFootprint.create_rect(8.5, 6.5)
+                        p.floors = 1
+                        p.architecture = BFParams.ArchStyle.CLASSIC_HOUSE
+                        p.facade_material = "plaster_ext"
+                        p.roof_kind = BFParams.Roof.GAMBREL
+                        p.roof_pitch = 0.5
+                        p.roof_pitch2 = 1.6
+                        p.chimney = true
+                        p.site_fence = true
+                        p.terrain_pad = true
+                        p.max_room_area = 16.0,
+                "townhouse": func():
+                        p.footprint = BFFootprint.create_rect(6.5, 12)
+                        p.floors = 3
+                        p.architecture = BFParams.ArchStyle.CLASSIC_HOUSE
+                        p.facade_material = "brick_red"
+                        p.roof_kind = BFParams.Roof.SHED
+                        p.window_style = BFParams.WindowStyle.TALL,
+                "mansion": func():
+                        p.footprint = BFFootprint.create_U(19, 14)
+                        p.floors = 3
+                        p.architecture = BFParams.ArchStyle.CLASSIC_HOUSE
+                        p.facade_material = "plaster_ext"
+                        p.roof_kind = BFParams.Roof.MANSARD
+                        p.roof_pitch = 0.35
+                        p.roof_pitch2 = 1.7
+                        p.chimney = true
+                        p.balconies = true,
+                "shop_apartments": func():
+                        p.footprint = BFFootprint.create_rect(14, 11)
+                        p.floors = 5
+                        p.architecture = BFParams.ArchStyle.BRICK_APARTMENT
+                        p.apply_architecture_defaults()
+                        p.balconies = true
+                        var shops := BFFloorOverride.new()
+                        shops.facade_material = "facade_panel"
+                        shops.window_style = BFParams.WindowStyle.CURTAIN
+                        p.floor_overrides = [shops],
+                "setback_tower": func():
+                        p.footprint = BFFootprint.create_rect(18, 14)
+                        p.floors = 10
+                        p.architecture = BFParams.ArchStyle.OFFICE_TOWER
+                        p.apply_architecture_defaults()
+                        p.stair_kind = BFParams.Stair.SPIRAL
+                        var mid := BFFloorOverride.new()
+                        mid.outset = -1.2
+                        var top := BFFloorOverride.new()
+                        top.outset = -2.2
+                        p.floor_overrides = [null, null, null, null, mid, mid, mid, mid, top, top]
         }
         if presets.has(preset_name):
                 var fn: Callable = presets[preset_name]
