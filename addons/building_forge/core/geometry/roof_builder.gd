@@ -84,35 +84,26 @@ static func build_roof(kind: int, st: SurfaceTool, st_trim: SurfaceTool, fp: BFF
                         _build_shed(st, st_trim, fp, base_y, overhang, pitch, tile)
 
 
-## Eave soffit: horizontal band from the wall face out to the ACTUAL roof
-## extent (each mitered wall vertex is ray-cast to the roof boundary),
-## facing DOWN. Without it the wedge under pitched/cone roofs is see-through
-## from outside, especially on non-rectangular footprints where the roof
-## overhangs the polygon outset.
-## cast: Callable(from: Vector2, dir: Vector2) -> Vector2 (outer point).
-static func _soffit(st: SurfaceTool, fp: BFFootprint, y: float, overhang: float, tile: Vector2, cast: Callable) -> void:
+## Eave soffit: horizontal band from the wall face out to the roof overhang,
+## facing DOWN, one quad per footprint edge using the order-preserving miter
+## outset (same vertex pairing as the wall bands - consistent winding, and
+## courtyard edges on U/L/T plans can never stretch across the notch).
+static func _soffit(st: SurfaceTool, fp: BFFootprint, y: float, overhang: float, tile: Vector2, _cast: Callable = Callable()) -> void:
         if overhang < 0.02:
                 return
+        var outer := BFWallBuilderS.outer_polygon(fp.points, overhang)
         var n := fp.points.size()
-        var outer := PackedVector2Array()
-        outer.resize(n)
-        for i in n:
-                var prev := (fp.points[(i - 1 + n) % n] - fp.points[i]).normalized()
-                var next := (fp.points[(i + 1) % n] - fp.points[i]).normalized()
-                var n0 := Vector2(prev.y, -prev.x)
-                var n1 := Vector2(next.y, -next.x)
-                var m := n0 + n1
-                m = m.normalized() if m.length() > 0.01 else n1
-                outer[i] = cast.call(fp.points[i], m)
+        if outer.size() != n:
+                return
         for i in n:
                 var a: Vector2 = fp.points[i]
                 var b: Vector2 = fp.points[(i + 1) % n]
                 var a2: Vector2 = outer[i]
                 var b2: Vector2 = outer[(i + 1) % n]
                 BFMeshUtilS.add_quad(st,
-                        [to3(a2, y), to3(b2, y), to3(b, y), to3(a, y)], Vector3.DOWN,
-                        [Vector2(a2.x * tile.x, a2.y * tile.y), Vector2(b2.x * tile.x, b2.y * tile.y),
-                        Vector2(b.x * tile.x, b.y * tile.y), Vector2(a.x * tile.x, a.y * tile.y)])
+                        [to3(a, y), to3(b, y), to3(b2, y), to3(a2, y)], Vector3.DOWN,
+                        [Vector2(a.x * tile.x, a.y * tile.y), Vector2(b.x * tile.x, b.y * tile.y),
+                        Vector2(b2.x * tile.x, b2.y * tile.y), Vector2(a2.x * tile.x, a2.y * tile.y)])
 
 
 ## Ray-cast helper factory: to an oriented box (gable/hip roof extent).
@@ -288,7 +279,7 @@ static func _build_gable(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint,
                         xfrm.basis * Vector3(sx, 0, 0),
                         [Vector2(0, 0), Vector2(hz * tile.x, ridge_h * tile.y), Vector2(2 * hz * tile.x, 0)])
         # seal interior
-        _deck(st, fp, base_y - 0.02, tile)
+        _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
 
@@ -316,11 +307,13 @@ static func _build_hip(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, b
         for s in [[1.0, r1], [-1.0, r0]]:
                 var sx: float = s[0]
                 var r: Vector3 = s[1]
+                # point order verified visually: the other order backface-culls
+                # the hip ends (you see the soffit through the roof gap)
                 BFMeshUtilS.add_quad(st,
-                        [xfrm * Vector3(sx * hx, eave_y, sx * hz), xfrm * r, xfrm * Vector3(sx * hx, eave_y, -sx * hz)],
+                        [xfrm * Vector3(sx * hx, eave_y, -sx * hz), xfrm * r, xfrm * Vector3(sx * hx, eave_y, sx * hz)],
                         xfrm.basis * Vector3(sx, 0, 0).normalized(),
                         [Vector2(0, 0), Vector2(hz * tile.x, ridge_h * tile.y), Vector2(2 * hz * tile.x, 0)])
-        _deck(st, fp, base_y - 0.02, tile)
+        _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
 
@@ -373,10 +366,10 @@ static func _build_mansard(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprin
                 var sx: float = sd[0]
                 var r: Vector3 = sd[1]
                 BFMeshUtilS.add_quad(st,
-                        [xfrm * Vector3(sx * kx, h1, sx * kz), xfrm * r, xfrm * Vector3(sx * kx, h1, -sx * kz)],
+                        [xfrm * Vector3(sx * kx, h1, -sx * kz), xfrm * r, xfrm * Vector3(sx * kx, h1, sx * kz)],
                         xfrm.basis * Vector3(sx, 0, 0).normalized(),
                         [Vector2(0, h1 * tile.y), Vector2(kz * tile.x, ridge_h * tile.y), Vector2(2 * kz * tile.x, h1 * tile.y)])
-        _deck(st, fp, base_y - 0.02, tile)
+        _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
 
@@ -413,9 +406,9 @@ static func _build_gambrel(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprin
         # gable end pentagons (x = +/-hx), fan-triangulated: 3 tris each
         for sx in [-1.0, 1.0]:
                 var pts := [
-                        Vector3(sx * hx, eave_y, -hz), Vector3(sx * hx, h1, -kz),
-                        Vector3(sx * hx, ridge_h, 0), Vector3(sx * hx, h1, kz),
-                        Vector3(sx * hx, eave_y, hz)]
+                        Vector3(sx * hx, eave_y, hz), Vector3(sx * hx, h1, kz),
+                        Vector3(sx * hx, ridge_h, 0), Vector3(sx * hx, h1, -kz),
+                        Vector3(sx * hx, eave_y, -hz)]
                 var nn := xfrm.basis * Vector3(sx, 0, 0)
                 for tri in [[0, 1, 2], [0, 2, 3], [0, 3, 4]]:
                         var uvs := [Vector2(0, 0), Vector2(hz * tile.x, h1 * tile.y), Vector2(2 * hz * tile.x, ridge_h * tile.y),
@@ -423,7 +416,7 @@ static func _build_gambrel(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprin
                         BFMeshUtilS.add_quad(st,
                                 [xfrm * pts[tri[0]], xfrm * pts[tri[1]], xfrm * pts[tri[2]]], nn,
                                 [uvs[tri[0]], uvs[tri[1]], uvs[tri[2]]])
-        _deck(st, fp, base_y - 0.02, tile)
+        _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
 
@@ -446,11 +439,11 @@ static func _build_shed(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, 
         # high-side wall face under the ridge (closes the -z gable band)
         for sx in [-1.0, 1.0]:
                 BFMeshUtilS.add_quad(st,
-                        [xfrm * Vector3(sx * hx, eave_y, hz), xfrm * Vector3(sx * hx, eave_y, -hz),
+                        [xfrm * Vector3(sx * hx, eave_y, -hz), xfrm * Vector3(sx * hx, eave_y, hz),
                         xfrm * Vector3(sx * hx, hr, -hz)],
                         xfrm.basis * Vector3(sx, 0, 0),
                         [Vector2(0, 0), Vector2(2 * hz * tile.x, 0), Vector2(2 * hz * tile.x, hr * tile.y)])
-        _deck(st, fp, base_y - 0.02, tile)
+        _deck(st, fp, base_y + 0.02, tile)
         _soffit(st_trim, fp, base_y - 0.02, overhang, tile, _obb_cast(xfrm, hx, hz, overhang * 3.0 + 1.0))
 
 
@@ -479,7 +472,7 @@ static func _build_cone(st: SurfaceTool, st_trim: SurfaceTool, fp: BFFootprint, 
                 st.set_normal(nrm)
                 st.set_uv(Vector2(mid_a * r * tile.x, h * tile.y))
                 st.add_vertex(apex)
-        _deck(st, fp, base_y - 0.02, tile)
+        _deck(st, fp, base_y + 0.02, tile)
         var cc := fp.center_xz()
         var rr := maxf(fp.size_xz().x, fp.size_xz().y) * 0.5 + overhang
         _soffit(st_trim, fp, base_y, overhang, tile, _circle_cast(cc, rr, overhang * 3.0 + 1.0))
@@ -509,7 +502,7 @@ static func _build_dome(st: SurfaceTool, fp: BFFootprint, base_y: float, tile: V
                         BFMeshUtilS.add_quad(st, [p00, p01, p11, p10], nrm,
                                 [Vector2(a0 * r * tile.x, phi0 * r * tile.y), Vector2(a1 * r * tile.x, phi0 * r * tile.y),
                                 Vector2(a1 * r * tile.x, phi1 * r * tile.y), Vector2(a0 * r * tile.x, phi1 * r * tile.y)])
-        _deck(st, fp, base_y - 0.02, tile)
+        _deck(st, fp, base_y + 0.02, tile)
 
 
 static func _sph(c: Vector2, r: float, phi: float, a: float, base_y: float) -> Vector3:
