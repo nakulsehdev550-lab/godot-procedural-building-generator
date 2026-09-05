@@ -169,6 +169,33 @@ miter-inset inner edge, so corners are watertight by construction; openings
 subdivide the band and their reveals come from the piece caps. All meshes use
 Godot's clockwise front-face winding with explicit outward normals.
 
+## What changed in v1.2 (interactive editing + FPS test map)
+
+- **Interactive editing suite** — draggable corner / roof / bend-point / pitch
+  / height handles with live regeneration and full undo integration; edge
+  midpoint handles insert new bend points mid-drag.
+- **Right-click wall editing** — cut windows/doors at the exact clicked point
+  and floor, remove openings, move the entrance, add/delete corners; custom
+  openings follow their wall when the footprint is reshaped later.
+- **Walkable FPS zoo map** (`demo/zoo_map.tscn`) — 16 seeded buildings on a
+  plaza, first-person player (WASD / mouse / sprint / jump), aim-and-restyle:
+  E facade, R roof, G paint, F flashlight. Buildings regenerate from params at
+  load — no baked geometry in the scene.
+- **Real window glazing** — glass panes are now solid 5 cm boxes centered in
+  the wall depth: no more one-face see-through from inside, and no glass
+  z-fighting.
+- **11 one-click presets** — suburban house, cottage, village house, modern
+  villa, mansion, townhouse, apartment block, shop+apartments, office tower,
+  setback tower, circular tower.
+- **Custom model slots** — swap any prop, or the whole window/door assembly,
+  with your own PackedScene (instanced at generation time, runtime stays
+  static).
+- **Facade detail kit** — stone plinth / cornice bands, brick chimneys, site
+  pad, picket fence with a gate at the entrance, per-floor overrides with
+  outset (overhang) and setback floors.
+- **Fast-drag mode** — while you drag a handle the generator skips props and
+  collision, then does a full rebuild on release (fluid on 10+ floor towers).
+
 ## What changed in v1.1 (architecture overhaul)
 
 - **Every room is door-reachable** — the stairwell is a first-class room on the
@@ -200,8 +227,10 @@ Godot's clockwise front-face winding with explicit outward normals.
 Headless test suites (run from the project root):
 
 ```bash
-godot --headless --path . --script res://tests/geo_smoke.gd   # geometry invariants (analytic volumes)
-godot --headless --path . --script res://tests/e2e_test.gd    # full building generation + edit preservation
+godot --headless --path . --script res://tests/geo_smoke.gd        # geometry invariants (analytic volumes)
+godot --headless --path . --script res://tests/e2e_test.gd         # 63 checks: generation + edit preservation
+godot --headless --path . --script res://tests/connectivity_test.gd # 76 checks: door reachability, stairs, balconies
+godot --headless --path . --script res://tests/zoo_runtime_test.gd  # zoo map: 16 buildings + player + restyle
 ```
 
 ## License

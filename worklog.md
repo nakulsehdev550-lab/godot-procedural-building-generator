@@ -97,3 +97,18 @@ Work Log:
 
 Stage Summary:
 - In progress
+
+---
+Task ID: 13
+Agent: main
+Task: v1.2.0 release — QA, version bump, push, zip upload to GitHub release
+
+Work Log:
+- Sandbox wiped again; restored via shallow clone (1.3GB, renders heavy) + re-downloaded Godot 4.3-stable (project features tag says 4.7 but 4.3 API-compatible, all tests green)
+- Baseline verified: geo_smoke ALL PASSED, e2e 63/63, connectivity 76/76, zoo_runtime ALL PASSED (16 buildings, player, camera, collision, runtime restyle)
+- Visual QA: wrote tests/qa_v12_shots.gd (loads real zoo_map.tscn, 6 overview + 4 street + 1 facade close-up); renders/qa_v12/ reviewed — windows have real thickness, no z-fighting, no residue
+- plugin.cfg 1.0.0 -> 1.2.0; README: added "What changed in v1.2" section + 4-suite test matrix
+- Next: commit, tag v1.2.0, build code-only zips (textures excluded per user instruction), create release, upload zips
+
+Stage Summary:
+- v1.2.0 verified release-ready; zips exclude baked textures (unchanged since v1.0.0, user already has them)
