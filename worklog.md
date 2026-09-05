@@ -112,3 +112,17 @@ Work Log:
 
 Stage Summary:
 - v1.2.0 verified release-ready; zips exclude baked textures (unchanged since v1.0.0, user already has them)
+
+---
+Task ID: 13 (final)
+Agent: main
+Task: v1.2.0 shipped
+
+Work Log:
+- Commit cd4e723 pushed to main (QA shots, README v1.2 section, plugin.cfg 1.2.0)
+- Release v1.2.0 created (id 383156969), both zips uploaded + anonymous-download verified
+- Assets: building_forge_plugin_v1.2.0.zip (86.5KB, root=addons/building_forge) + building_forge_full_project_v1.2.0.zip (140.1KB) — textures/baked EXCLUDED (unchanged since v1.0.0, noted in release body)
+- Local copies in /home/z/my-project/download/
+
+Stage Summary:
+- v1.2.0 LIVE: https://github.com/nakulsehdev550-lab/godot-procedural-building-generator/releases/tag/v1.2.0
